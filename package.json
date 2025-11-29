@@ -1,0 +1,11 @@
+{
+  "name": "officexadd",
+  "version": "1.0.0",
+  "description": "Office Add-in",
+  "scripts": {
+    "start": "office-addin-debugging start frontend/manifest.xml"
+  },
+  "devDependencies": {
+    "office-addin-debugging": "^5.0.0"
+  }
+}
