@@ -7,49 +7,303 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OfficeXAdd</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js"></script>
     <style>
+        @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap");
+
+        :root {
+            --ink: #1b1a1a;
+            --ink-muted: #4b4b4b;
+            --surface: #fffaf3;
+            --card: #ffffff;
+            --accent: #0f6b62;
+            --accent-strong: #0a4f49;
+            --accent-soft: #dff1ee;
+            --shadow: 0 18px 40px rgba(26, 30, 32, 0.12);
+            --border: #e6dfd2;
+        }
+
         body {
+            margin: 0;
             padding: 20px;
-            font-family: Arial, sans-serif;
+            font-family: "Space Grotesk", "Avenir Next", sans-serif;
+            color: var(--ink);
+            background: radial-gradient(circle at top left, #f3ede3 0%, #fbf7f0 55%, #f1f7f5 100%);
+        }
+
+        .page {
+            max-width: 520px;
+            margin: 0 auto;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: var(--shadow);
+            animation: fadeIn 450ms ease;
+            position: relative;
+        }
+
+        h1 {
+            font-family: "Fraunces", "Georgia", serif;
+            font-size: 1.1rem;
+            margin: 8px 0 4px;
+            letter-spacing: 0.02em;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--ink-muted);
+            margin: 0 0 16px;
+        }
+
+        .version-badge {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            font-size: 0.72rem;
+            color: #7b7468;
+            letter-spacing: 0.04em;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--ink);
+        }
+
+        label.is-compact {
+            font-size: 0.85rem;
+            letter-spacing: 0.01em;
+        }
+
+        textarea,
+        select,
+        input {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid #d9d2c5;
+            padding: 10px 12px;
+            font-family: inherit;
+            font-size: 0.92rem;
+            background-color: #fffdf9;
+            box-sizing: border-box;
         }
 
         textarea {
-            width: 100%;
-            height: 150px;
             margin-bottom: 10px;
+            resize: vertical;
+        }
+
+        #inputText {
+            height: 150px;
+        }
+
+        .card {
+            padding: 14px;
+            border-radius: 14px;
+            background: var(--card);
+            border: 1px solid #ebe3d7;
+            margin-bottom: 12px;
+            animation: fadeUp 380ms ease;
+        }
+
+        small {
+            color: var(--ink-muted);
         }
 
         button {
-            padding: 10px 20px;
-            background-color: #0078d4;
-            color: white;
+            width: 100%;
+            padding: 12px 20px;
+            border-radius: 12px;
             border: none;
             cursor: pointer;
+            color: white;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            background: linear-gradient(135deg, var(--accent) 0%, #1f8a7f 100%);
+            box-shadow: 0 12px 24px rgba(15, 107, 98, 0.25);
         }
 
         button:disabled {
-            background-color: #cccccc;
+            background: #cfc7bb;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        button.is-stop {
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+            box-shadow: 0 12px 24px rgba(192, 57, 43, 0.25);
+        }
+
+        button.secondary-button {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 0.82rem;
+            border-radius: 10px;
+            background: #f4eee3;
+            color: #2e2b26;
+            box-shadow: none;
+            border: 1px solid #e1d6c7;
+        }
+
+        button.secondary-button:disabled {
+            color: #7d7568;
+            background: #f1ece3;
+            border-color: #e6dfd2;
         }
 
         #result {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border: 1px solid #ccc;
+            margin-top: 16px;
+            padding: 12px;
+            background-color: #f7f1e7;
+            border: 1px solid #e7dccd;
+            border-radius: 12px;
+            color: #2e2b26;
+        }
+
+        #resultContent .katex {
+            font-size: 1rem;
+        }
+
+        .result-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+
+        .result-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .result-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        #statusBar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background-color: var(--accent-soft);
+            border: 1px solid #c9e5e1;
+            color: var(--accent-strong);
+            font-size: 0.9rem;
+            border-radius: 12px;
+            margin-top: 12px;
+            animation: fadeUp 420ms ease;
+        }
+
+        #statusBar::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--accent-strong);
+            box-shadow: 0 0 0 4px rgba(15, 107, 98, 0.12);
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+
+        .toggle-label input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            flex: 0 0 auto;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
         }
     </style>
 </head>
 
 <body>
-    <h1>AI Text Rewriter</h1>
-    <textarea id="inputText" placeholder="Enter text to rewrite..."></textarea>
-    <div style="margin-bottom: 10px;">
-        <label for="instructionText" style="display:block; margin-bottom: 5px; font-weight: bold;">Instructions:</label>
-        <textarea id="instructionText" placeholder="e.g., Make it more formal"
-            style="width: 100%; padding: 8px; box-sizing: border-box;" rows="2"></textarea>
+    <div class="page">
+        <div class="version-badge">v0.1.0</div>
+        <h1>AI Text Rewriter</h1>
+        <p class="subtitle">Rewrite selected text with the tone you choose.</p>
+
+        <div class="card">
+            <label for="inputText" class="is-compact">引入文章</label>
+            <textarea id="inputText" placeholder="Enter text to rewrite..."></textarea>
+            <label for="instructionText" class="is-compact">Instructions:</label>
+            <textarea id="instructionText" placeholder="e.g., Make it more formal" rows="3"></textarea>
+        </div>
+
+        <div class="card">
+            <label for="providerSelect">AI Provider:</label>
+            <select id="providerSelect">
+                <option value="openai">OpenAI (official API)</option>
+                <option value="ollama">Ollama (OpenAI-compatible)</option>
+            </select>
+            <small style="display:block; margin-top: 6px;">Ollama requires the backend to be configured with `AI_BASE_URL` and `AI_API_KEY`.</small>
+        </div>
+
+        <div class="card">
+            <label for="modelInput">Model (optional)</label>
+            <input id="modelInput" list="modelList" placeholder="e.g., gpt-4o-mini or mistral-large-3:675b-cloud" />
+            <small style="display:block; margin-top: 6px;">Choose from the list below or type any name. The list refreshes when you change the provider.</small>
+            <datalist id="modelList"></datalist>
+            <div id="modelStatus" style="font-size: 0.85rem; margin-top: 6px;">Loading models...</div>
+        </div>
+
+        <div class="card">
+            <label class="toggle-label">
+                <input id="webSearchToggle" type="checkbox" />
+                Use web search
+            </label>
+            <small style="display:block; margin-top: 6px;">When enabled, the backend will call the provider's web search tool.</small>
+            <label class="toggle-label" style="margin-top: 12px;">
+                <input id="skipPasteToggle" type="checkbox" />
+                不要直接貼上
+            </label>
+            <small style="display:block; margin-top: 6px;">勾選後只顯示結果，不會自動取代 Word 內選取文字。</small>
+        </div>
+
+        <button id="rewriteBtn">Rewrite & Replace</button>
+        <div id="result">
+            <div class="result-actions">
+                <span class="result-title">Rewritten Text</span>
+                <div class="result-buttons">
+                    <button id="insertBtn" class="secondary-button" type="button" disabled>填入</button>
+                    <button id="copyBtn" class="secondary-button" type="button" disabled>Copy</button>
+                </div>
+            </div>
+            <div id="resultContent">Ready.</div>
+        </div>
+        <div id="statusBar">Idle</div>
     </div>
-    <button id="rewriteBtn">Rewrite & Replace</button>
-    <div id="result"></div>
     <script src="taskpane.js"></script>
 </body>
 

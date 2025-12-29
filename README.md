@@ -36,10 +36,17 @@ For a detailed guide in Chinese, please see [local_setup_guide_zh.md](local_setu
 ### 1. Backend Setup
 
 1.  Navigate to `backend/`.
-2.  Create a `.env` file and add your API key:
+2.  Create a `.env` file and add your API keys/configuration:
     ```
     OPENAI_API_KEY=sk-proj-your-key-here
+    AI_BASE_URL=https://ollama.labelnine.app:5016/v1
+    AI_API_KEY=ollama-your-key-here
+    MODEL_NAME=mistral-large-3:675b-cloud
+    OLLAMA_WEB_SEARCH_API_KEY=ollama-web-search-key-here
     ```
+    * `AI_BASE_URL` and `AI_API_KEY` let the backend talk to OpenAI-compatible hosts such as Ollama; omit them if you only target `api.openai.com`.
+    * `OLLAMA_WEB_SEARCH_API_KEY` is required if you enable web search while using the Ollama provider (if omitted, the backend falls back to `AI_API_KEY`).
+    * If your environment cannot reach `api.ollama.com`, set `OLLAMA_WEB_SEARCH_URL` to a reachable web search endpoint.
 3.  Install dependencies:
     ```bash
     pip install -r requirements.txt
@@ -83,6 +90,9 @@ npx office-addin-debugging start frontend/manifest.xml
     - The AI will process your text.
     - The selected text in Word will be **automatically replaced** with the new version.
     - Formatting (bold, lists, etc.) is preserved/applied where possible.
+    - Use the **AI Provider** dropdown to switch between the official OpenAI endpoint and an OpenAI-compatible host such as Ollama (which requires `AI_BASE_URL`/`AI_API_KEY` in `.env`).
+    - The **Model (optional)** field now pulls a provider-specific list of models from the backend; change the provider to refresh the suggestion list or type any other name you need.
+    - Enable **Use web search** to let the backend call the provider's web search tool (if supported by the chosen model/provider).
 
 ## Troubleshooting
 

@@ -12,11 +12,18 @@
     cd /Users/rich_imac/Downloads/officexadd/backend
     ```
 
-2.  **設定 API Key**：
-    我們已經為您建立了一個 `.env` 檔案。請使用文字編輯器打開它，並填入您的 OpenAI API Key：
+2.  **設定 API Key 與自訂終端**：
+    我們已經為您建立了一個 `.env` 檔案。請使用文字編輯器打開它，並填入您的金鑰與模型設定。
     ```text
     OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx  <-- 替換成您的 Key
+    AI_BASE_URL=https://ollama.labelnine.app:5016/v1
+    AI_API_KEY=ollama-xxxxxxxxxxxxxxxxxxxxxxxx
+    MODEL_NAME=mistral-large-3:675b-cloud
+    OLLAMA_WEB_SEARCH_API_KEY=ollama-web-search-key-here
     ```
+    * `AI_BASE_URL` 與 `AI_API_KEY` 可讓後端發送請求到 OpenAI 相容服務（例如 Ollama）。如果您只使用官方 OpenAI，這兩行可以留空或刪除。
+    * 使用 Ollama 的 web search 時需要提供 `OLLAMA_WEB_SEARCH_API_KEY`（若未提供，會改用 `AI_API_KEY`）。
+    * 若無法連到 `api.ollama.com`，請設定 `OLLAMA_WEB_SEARCH_URL` 指向可用的 web search 服務。
 
 3.  **安裝依賴套件**：
     建議建立一個虛擬環境 (Virtual Environment) 來安裝套件：
@@ -145,3 +152,6 @@ npx office-addin-debugging start manifest.xml
 6.  在側邊欄的 Instructions 輸入：「變得更專業一點」。
 7.  按下 **"Rewrite & Replace"**。
 8.  文字應該會自動變更！
+9.  在側邊欄的 **AI Provider** 下拉選單中選擇官方 OpenAI 或 Ollama (選 Ollama 時請先在 `.env` 填好 `AI_BASE_URL` 與 `AI_API_KEY`)，需要不同模型時可在「Model (optional)」欄位輸入名稱。
+10. 「Model (optional)」欄位會從後端讀取並顯示該提供者目前可用的模型，切換提供者會重新載入選單內容，但仍可自行輸入任意模型名稱。
+11. 若需要網路搜尋，勾選 **Use web search**，後端會呼叫對應提供者的網頁搜尋工具（前提是該模型/服務支援此能力）。
