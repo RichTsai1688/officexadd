@@ -33,6 +33,18 @@ officexadd/
 
 For a detailed guide in Chinese, please see [local_setup_guide_zh.md](local_setup_guide_zh.md).
 
+## One-click Install & Start (Mac/Linux)
+
+1.  Ensure `backend/.env` exists. If not, copy `backend/.env.example` and fill in your keys.
+2.  Run:
+    ```bash
+    ./one_click.sh
+    ```
+3.  To stop background servers later:
+    ```bash
+    ./stop.sh
+    ```
+
 ### 1. Backend Setup
 
 1.  Navigate to `backend/`.

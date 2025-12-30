@@ -236,13 +236,20 @@ def rewrite_text():
     try:
         data = request.get_json()
         original_text = data.get('text', '')
-        instruction = data.get('instruction', 'Rewrite this text in a formal academic tone')
+        instruction = data.get('instruction', '')
         provider = (data.get('provider') or 'openai').strip().lower()
         model_name = data.get('model') or MODEL_NAME or 'gpt-4o-mini'
         use_web_search = bool(data.get('use_web_search'))
+        context_mode = (data.get('context_mode') or '').strip().lower()
+        context_text = data.get('context_text') or ''
+        context_note = data.get('context_note') or ''
 
-        if not original_text.strip():
-            return jsonify({'error': 'No text provided'}), 400
+        original_text = original_text or ""
+        instruction = instruction or ""
+        if not instruction.strip() and original_text.strip():
+            instruction = 'Rewrite this text in a formal academic tone'
+        if not original_text.strip() and not instruction.strip():
+            return jsonify({'error': 'No instruction provided'}), 400
 
         if provider == 'ollama':
             base_url = OLLAMA_BASE_URL
@@ -262,6 +269,17 @@ def rewrite_text():
             "(for example, <p>, <strong>, <em>, <ul>, <li>). Return only the rewritten content without "
             "introductions, explanations, AI commentary, and do not emit <html> or <body> tags."
         )
+        if not original_text.strip():
+            system_prompt += (
+                " If the input text is empty, generate new content that satisfies the instruction and "
+                "fits the provided context. Avoid repeating nearby context."
+            )
+        if context_text:
+            system_prompt += (
+                " Use the provided document context to keep continuity and avoid repeating content. "
+                "The context may contain markers like [[EDIT_START]], [[EDIT_END]], or [[CURSOR]] to show "
+                "the rewrite location; never include these markers in the output."
+            )
         if use_web_search:
             system_prompt += (
                 " Verify factual accuracy using web search. After the rewrite, include a short "
@@ -270,9 +288,20 @@ def rewrite_text():
         else:
             system_prompt += " Do not include citations or source lists."
 
+        user_message = f"Instruction: {instruction}"
+        if original_text.strip():
+            user_message += f"\n\nText: {original_text}"
+        else:
+            user_message += "\n\nText: (none)"
+        if context_text:
+            mode_label = context_mode or "custom"
+            user_message += f"\n\nContext ({mode_label}):\n{context_text}"
+            if context_note:
+                user_message += f"\n\nContext note: {context_note}"
+
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Instruction: {instruction}\n\nText: {original_text}"}
+            {"role": "user", "content": user_message}
         ]
 
         if use_web_search:
@@ -336,4 +365,4 @@ def list_models():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)

@@ -226,6 +226,27 @@
             flex: 0 0 auto;
         }
 
+        .context-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .context-inputs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #contextSize {
+            max-width: 120px;
+        }
+
+        .context-hidden {
+            display: none;
+        }
+
         @keyframes fadeUp {
             from {
                 opacity: 0;
@@ -259,6 +280,24 @@
             <textarea id="inputText" placeholder="Enter text to rewrite..."></textarea>
             <label for="instructionText" class="is-compact">Instructions:</label>
             <textarea id="instructionText" placeholder="e.g., Make it more formal" rows="3"></textarea>
+        </div>
+
+        <div class="card">
+            <label for="contextMode">上下文參考</label>
+            <select id="contextMode">
+                <option value="full">全文參考（含標記）</option>
+                <option value="chars">前後 N 字</option>
+                <option value="pages">前後 N 頁</option>
+                <option value="none">不使用上下文</option>
+            </select>
+            <div id="contextSizeRow" class="context-row context-hidden">
+                <label for="contextSize" class="is-compact">範圍</label>
+                <div class="context-inputs">
+                    <input id="contextSize" type="number" min="1" value="400" />
+                    <span id="contextUnit">字</span>
+                </div>
+            </div>
+            <small id="contextHelp" style="display:block; margin-top: 6px;">會把選取位置前後的內容一起送出，避免重複段落。</small>
         </div>
 
         <div class="card">

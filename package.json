@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Office Add-in",
   "scripts": {
-    "start": "office-addin-debugging start frontend/manifest.xml"
+    "start": "office-addin-debugging start frontend/manifest.xml",
+    "one-click": "bash ./one_click.sh"
   },
   "devDependencies": {
-    "office-addin-debugging": "^5.0.0"
+    "office-addin-debugging": "^5.0.0",
+    "http-server": "^14.1.1"
   }
 }

@@ -2,6 +2,18 @@
 
 這份指南將協助您在不使用 Docker 的情況下，於本機執行後端伺服器，並將 Office Add-in 安裝 (Sideload) 到 Word 中。
 
+## 一鍵安裝與啟動 (Mac/Linux)
+
+1.  確認 `backend/.env` 存在，若沒有可先複製 `backend/.env.example` 後填入金鑰。
+2.  在專案根目錄執行：
+    ```bash
+    ./one_click.sh
+    ```
+3.  要停止背景服務時：
+    ```bash
+    ./stop.sh
+    ```
+
 ## 1. 後端設定 (Backend Setup)
 
 我們已經將設定改為使用 `.env` 檔案，方便您管理 API Key。
@@ -37,7 +49,7 @@
     ```bash
     python app.py
     ```
-    看到 `Running on http://0.0.0.0:5000` 表示啟動成功。
+    看到 `Running on http://0.0.0.0:5001` 表示啟動成功。
 
 ---
 

@@ -16,6 +16,7 @@ frontend/.venv/
 # Environment files
 .env
 *.env
+.pids/
 
 # Node.js
 node_modules/
