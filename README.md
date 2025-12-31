@@ -51,9 +51,9 @@ For a detailed guide in Chinese, please see [local_setup_guide_zh.md](local_setu
 2.  Create a `.env` file and add your API keys/configuration:
     ```
     OPENAI_API_KEY=sk-proj-your-key-here
-    AI_BASE_URL=https://ollama.labelnine.app:5016/v1
+    AI_BASE_URL=https://ollama.com/v1
     AI_API_KEY=ollama-your-key-here
-    MODEL_NAME=mistral-large-3:675b-cloud
+    MODEL_NAME=gpt-oss
     OLLAMA_WEB_SEARCH_API_KEY=ollama-web-search-key-here
     ```
     * `AI_BASE_URL` and `AI_API_KEY` let the backend talk to OpenAI-compatible hosts such as Ollama; omit them if you only target `api.openai.com`.
