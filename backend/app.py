@@ -25,6 +25,10 @@ OLLAMA_WEB_SEARCH_API_KEY = os.getenv("OLLAMA_WEB_SEARCH_API_KEY") or os.getenv(
 OLLAMA_WEB_SEARCH_URL = os.getenv("OLLAMA_WEB_SEARCH_URL") or ""
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or LEGACY_API_KEY
 MODEL_NAME = os.getenv("MODEL_NAME") or ""
+DEFAULT_MODELS = {
+    "openai": "gpt-4o-mini",
+    "ollama": "llama3.1",
+}
 
 def build_client(base_url: str | None = None, api_key: str | None = None):
     kwargs = {}
@@ -230,6 +234,39 @@ def run_with_web_search(client, model_name, messages, provider):
         return run_ollama_web_search_tool_flow(client, model_name, messages)
     return run_openai_web_search(client, model_name, messages)
 
+
+def resolve_model_name(provider: str, requested: str | None) -> tuple[str, str | None]:
+    """
+    Pick a model name appropriate for the provider and fall back if the value
+    looks incompatible (e.g., Ollama-style model name used with OpenAI).
+    Returns (model_name, warning_note).
+    """
+    fallback = DEFAULT_MODELS.get(provider, "gpt-4o-mini")
+    model = (requested or "").strip()
+    if not model:
+        return fallback, None
+
+    if provider == "openai" and ":" in model:
+        # A colon is common in Ollama model IDs; OpenAI would return model_not_found.
+        return fallback, f"Incompatible model '{model}' for provider openai. Fell back to '{fallback}'."
+
+    return model, None
+
+
+def classify_api_error(error: Exception) -> tuple[str, int]:
+    """
+    Translate provider errors into client-friendly HTTP status codes.
+    """
+    message = str(error)
+    lowered = message.lower()
+    if "model_not_found" in lowered or "does not exist" in lowered:
+        return message, 400
+    if "rate limit" in lowered or "too many requests" in lowered:
+        return message, 429
+    if "invalid api key" in lowered or "authentication" in lowered:
+        return message, 401
+    return message, 500
+
 # client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 @app.route('/rewrite', methods=['POST'])
 def rewrite_text():
@@ -238,7 +275,8 @@ def rewrite_text():
         original_text = data.get('text', '')
         instruction = data.get('instruction', '')
         provider = (data.get('provider') or 'openai').strip().lower()
-        model_name = data.get('model') or MODEL_NAME or 'gpt-4o-mini'
+        requested_model = data.get('model') or MODEL_NAME or ''
+        model_name, model_warning = resolve_model_name(provider, requested_model)
         use_web_search = bool(data.get('use_web_search'))
         context_mode = (data.get('context_mode') or '').strip().lower()
         context_text = data.get('context_text') or ''
@@ -298,6 +336,8 @@ def rewrite_text():
             user_message += f"\n\nContext ({mode_label}):\n{context_text}"
             if context_note:
                 user_message += f"\n\nContext note: {context_note}"
+        if model_warning:
+            user_message += f"\n\nModel note: {model_warning}"
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -320,11 +360,15 @@ def rewrite_text():
             rewritten_text = extract_response_text(response)
         if not rewritten_text or not rewritten_text.strip():
             return jsonify({'error': 'Model returned empty output.'}), 502
-        return jsonify({'rewritten_text': rewritten_text})
+        response_body = {'rewritten_text': rewritten_text}
+        if model_warning:
+            response_body['model_note'] = model_warning
+        return jsonify(response_body)
 
     except Exception as e:
-        print(f"Error: {str(e)}")  # Log error to console
-        return jsonify({'error': str(e)}), 500
+        message, status = classify_api_error(e)
+        print(f"Error: {message}")  # Log error to console
+        return jsonify({'error': message}), status
 
 
 @app.route('/models', methods=['GET'])

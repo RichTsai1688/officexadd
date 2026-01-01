@@ -1,8 +1,10 @@
 let isProcessing = false;
 let currentController = null;
 let activeRequestId = 0;
+let activeTimeouts = new Set();
 const WEB_SEARCH_TIMEOUT_MS = 120000;
 const DEFAULT_TIMEOUT_MS = 45000;
+const MAX_CONTEXT_CHARS = 12000;
 const CONTEXT_MARKER_START = "[[EDIT_START]]";
 const CONTEXT_MARKER_END = "[[EDIT_END]]";
 const CONTEXT_MARKER_CURSOR = "[[CURSOR]]";
@@ -81,6 +83,21 @@ function cancelCurrentRequest() {
     setStatus("Canceled by user.");
 }
 
+function cleanupResources() {
+    // 取消當前請求
+    if (currentController) {
+        currentController.abort();
+        currentController = null;
+    }
+    // 清除所有 timeout
+    activeTimeouts.forEach(timeoutId => {
+        clearTimeout(timeoutId);
+    });
+    activeTimeouts.clear();
+    // 重置狀態
+    isProcessing = false;
+}
+
 function updateContextControls() {
     const modeSelect = document.getElementById("contextMode");
     const sizeRow = document.getElementById("contextSizeRow");
@@ -135,7 +152,8 @@ function getSelectedTextFallback() {
     });
 }
 
-async function getWordSnapshot() {
+async function getWordSnapshot(options = {}) {
+    const includeDocumentText = Boolean(options.includeDocumentText);
     if (typeof Word === "undefined") {
         const fallbackText = await getSelectedTextFallback();
         return { selectionText: fallbackText, documentText: "", paragraphHints: [] };
@@ -143,16 +161,27 @@ async function getWordSnapshot() {
     try {
         return await Word.run(async (context) => {
             const selection = context.document.getSelection();
-            const body = context.document.body;
-            const paragraphs = selection.paragraphs;
             selection.load("text");
-            body.load("text");
-            paragraphs.load("text");
-            await context.sync();
-            const paragraphHints = (paragraphs.items || []).map((item) => item.text || "").filter(Boolean);
+
+            let body;
+            let paragraphs;
+            if (includeDocumentText) {
+                body = context.document.body;
+                paragraphs = selection.paragraphs;
+                body.load("text");
+                paragraphs.load("text");
+            }
+
+            await context.sync().catch(err => {
+                console.warn("Context sync error:", err);
+                throw err;
+            });
+            const paragraphHints = includeDocumentText && paragraphs
+                ? (paragraphs.items || []).map((item) => item.text || "").filter(Boolean)
+                : [];
             return {
                 selectionText: selection.text || "",
-                documentText: body.text || "",
+                documentText: includeDocumentText && body ? body.text || "" : "",
                 paragraphHints
             };
         });
@@ -216,6 +245,37 @@ function findSelectionIndex(documentText, selectionText, paragraphHints) {
         }
     }
     return occurrences[0];
+}
+
+function limitDocumentText(documentText, selectionIndex) {
+    if (!documentText) {
+        return { text: documentText, selectionIndex, note: "" };
+    }
+    if (documentText.length <= MAX_CONTEXT_CHARS) {
+        return { text: documentText, selectionIndex, note: "" };
+    }
+
+    if (selectionIndex < 0) {
+        return {
+            text: documentText.slice(0, MAX_CONTEXT_CHARS),
+            selectionIndex,
+            note: `Context truncated to ${MAX_CONTEXT_CHARS} characters from start.`,
+        };
+    }
+
+    const half = Math.floor(MAX_CONTEXT_CHARS / 2);
+    const start = Math.max(0, selectionIndex - half);
+    const end = Math.min(documentText.length, start + MAX_CONTEXT_CHARS);
+    const sliceStart = Math.max(0, end - MAX_CONTEXT_CHARS);
+    const sliceEnd = Math.min(documentText.length, sliceStart + MAX_CONTEXT_CHARS);
+    const trimmedText = documentText.slice(sliceStart, sliceEnd);
+    const adjustedIndex = Math.max(0, selectionIndex - sliceStart);
+
+    return {
+        text: trimmedText,
+        selectionIndex: adjustedIndex,
+        note: `Context truncated to ${MAX_CONTEXT_CHARS} characters around selection.`,
+    };
 }
 
 function buildMarkedContext(beforeText, selectionText, afterText) {
@@ -302,27 +362,33 @@ function buildPageContext(documentText, selectionText, selectionIndex, size) {
 }
 
 function buildContextFromSnapshot(snapshot, mode, size) {
-    const documentText = snapshot.documentText || "";
+    const originalDocumentText = snapshot.documentText || "";
     const selectionText = snapshot.selectionText || "";
-    const selectionIndex = findSelectionIndex(documentText, selectionText, snapshot.paragraphHints || []);
-    const selectionNote = selectionIndex < 0 ? "Selection location not found in document text." : "";
+    const rawSelectionIndex = findSelectionIndex(originalDocumentText, selectionText, snapshot.paragraphHints || []);
+    let contextNote = rawSelectionIndex < 0 ? "Selection location not found in document text." : "";
+    const limited = limitDocumentText(originalDocumentText, rawSelectionIndex);
+    const documentText = limited.text || "";
+    const selectionIndex = limited.selectionIndex;
+    if (limited.note) {
+        contextNote = contextNote ? `${contextNote} ${limited.note}` : limited.note;
+    }
     if (mode === CONTEXT_MODE_FULL) {
-        return { contextText: buildFullContext(documentText, selectionText, selectionIndex), note: selectionNote };
+        return { contextText: buildFullContext(documentText, selectionText, selectionIndex), note: contextNote };
     }
     if (mode === CONTEXT_MODE_CHARS) {
         const safeSize = size > 0 ? size : 200;
-        return { contextText: buildCharContext(documentText, selectionText, selectionIndex, safeSize), note: selectionNote };
+        return { contextText: buildCharContext(documentText, selectionText, selectionIndex, safeSize), note: contextNote };
     }
     if (mode === CONTEXT_MODE_PAGES) {
         const safeSize = size > 0 ? size : 1;
         const result = buildPageContext(documentText, selectionText, selectionIndex, safeSize);
         let note = result.approx ? "Page boundaries approximated by characters." : "";
-        if (selectionNote) {
-            note = note ? `${note} ${selectionNote}` : selectionNote;
+        if (contextNote) {
+            note = note ? `${note} ${contextNote}` : contextNote;
         }
         return { contextText: result.context, note };
     }
-    return { contextText: "", note: "" };
+    return { contextText: "", note: contextNote };
 }
 
 function formatRequestError(error, didTimeout) {
@@ -365,9 +431,11 @@ async function copyResult() {
         setStatus("Copied to clipboard.");
         if (copyBtn) {
             copyBtn.textContent = "Copied";
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 copyBtn.textContent = "Copy";
+                activeTimeouts.delete(timeoutId);
             }, 1200);
+            activeTimeouts.add(timeoutId);
         }
     } catch (error) {
         setStatus("Copy failed.");
@@ -396,6 +464,9 @@ function insertResultIntoDocument() {
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
+        // 使用 cleanupResources 而不是 cancelCurrentRequest 確保完全清理
+        window.addEventListener("unload", cleanupResources);
+        window.addEventListener("beforeunload", cleanupResources);
         document.getElementById("rewriteBtn").onclick = rewriteText;
         const copyBtn = document.getElementById("copyBtn");
         if (copyBtn) {
@@ -406,8 +477,6 @@ Office.onReady((info) => {
             insertBtn.onclick = insertResultIntoDocument;
         }
 
-        // Register selection change event handler
-        Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange);
         const contextMode = document.getElementById("contextMode");
         if (contextMode) {
             contextMode.addEventListener("change", updateContextControls);
@@ -420,14 +489,6 @@ Office.onReady((info) => {
         }
     }
 });
-
-async function onSelectionChange(eventArgs) {
-    await Office.context.document.getSelectedDataAsync(Office.CoercionType.Text, (result) => {
-        if (result.status === Office.AsyncResultStatus.Succeeded) {
-            document.getElementById("inputText").value = result.value;
-        }
-    });
-}
 
 async function rewriteText() {
     if (isProcessing) {
@@ -456,7 +517,8 @@ async function rewriteText() {
 
     try {
         setStatus("Reading selection...");
-        const snapshot = await getWordSnapshot();
+        const needsDocument = contextMode !== CONTEXT_MODE_NONE;
+        const snapshot = await getWordSnapshot({ includeDocumentText: needsDocument });
         let textToRewrite = inputText;
         if (snapshot.selectionText && snapshot.selectionText.trim()) {
             textToRewrite = snapshot.selectionText;
@@ -519,7 +581,9 @@ async function rewriteText() {
                 if (currentController) {
                     currentController.abort();
                 }
+                activeTimeouts.delete(timeoutId);
             }, timeoutMs);
+            activeTimeouts.add(timeoutId);
 
             let response;
             try {
@@ -533,13 +597,25 @@ async function rewriteText() {
                 });
             } finally {
                 clearTimeout(timeoutId);
+                activeTimeouts.delete(timeoutId);
             }
 
+            let data;
             if (!response.ok) {
-                throw new Error(`API error: ${response.status}`);
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    data = {};
+                }
+                const errorDetail = data && data.error ? data.error : "";
+                const errorMessage = errorDetail
+                    ? `API error: ${response.status} - ${errorDetail}`
+                    : `API error: ${response.status}`;
+                throw new Error(errorMessage);
+            } else {
+                data = await response.json();
             }
 
-            const data = await response.json();
             const newText = data.rewritten_text;
             if (requestId !== activeRequestId || !isProcessing) {
                 return;
@@ -556,7 +632,8 @@ async function rewriteText() {
             }
             setStatus("Replacing selection in Word...");
             Office.context.document.setSelectedDataAsync(newText, { coercionType: Office.CoercionType.Html }, (asyncResult) => {
-                if (requestId !== activeRequestId || !isProcessing) {
+                if (requestId !== activeRequestId) {
+                    setProcessingState(false);
                     return;
                 }
                 if (asyncResult.status === Office.AsyncResultStatus.Failed) {

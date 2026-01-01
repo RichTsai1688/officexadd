@@ -16,7 +16,21 @@ stop_pid() {
     fi
 }
 
+force_stop_port() {
+    local port="$1"
+    local pids
+    pids=$(lsof -ti :"$port" || true)
+    if [[ -n "$pids" ]]; then
+        echo "Force killing processes on port $port: $pids"
+        kill $pids >/dev/null 2>&1 || true
+    fi
+}
+
 stop_pid "$PID_DIR/frontend.pid"
 stop_pid "$PID_DIR/backend.pid"
+
+# Fallback: ensure ports are freed even if pid files are stale or missing
+force_stop_port 3000
+force_stop_port 5001
 
 echo "Stopped background servers (if running)."
