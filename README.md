@@ -74,10 +74,10 @@ For a detailed guide in Chinese, please see [local_setup_guide_zh.md](local_setu
 2.  Start a simple HTTP server (requires Node.js `http-server` or Python `http.server`):
     ```bash
     # Node.js (Recommended)
-    npx http-server -p 3000 --cors
+    npx http-server -p 3010 --cors
     
     # Python alternative
-    python3 -m http.server 3000
+    python3 -m http.server 3010
     ```
 
 ### 3. Sideload to Word

@@ -16,6 +16,6 @@ mkdir -p "$PID_DIR"
 "$PYTHON_BIN" "$ROOT_DIR/backend/app.py" > "$ROOT_DIR/backend/server.log" 2>&1 &
 echo $! > "$PID_DIR/backend.pid"
 
-(cd "$ROOT_DIR/frontend" && npx http-server -p 3000 --cors > "$ROOT_DIR/frontend/frontend.log" 2>&1 & echo $! > "$PID_DIR/frontend.pid")
+(cd "$ROOT_DIR/frontend" && npx http-server -p 3010 --cors > "$ROOT_DIR/frontend/frontend.log" 2>&1 & echo $! > "$PID_DIR/frontend.pid")
 
-echo "Restarted backend (5001) and frontend (3000)."
+echo "Restarted backend (5010) and frontend (3010)."

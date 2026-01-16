@@ -49,7 +49,7 @@
     ```bash
     python app.py
     ```
-    看到 `Running on http://0.0.0.0:5001` 表示啟動成功。
+    看到 `Running on http://0.0.0.0:5010` 表示啟動成功。
 
 ---
 
@@ -68,7 +68,7 @@
 
 2.  **啟動伺服器**：
     ```bash
-    python3 -m http.server 3000
+    python3 -m http.server 3010
     ```
     *(注意：是 `http.server`，中間是點號)*
 
@@ -103,7 +103,7 @@ npm install --global http-server
 
 然後就可以使用您原本想用的指令了：
 ```bash
-http-server -p 3000 --cors
+http-server -p 3010 --cors
 ```
 *(加上 `--cors` 可以避免一些跨域問題)*
 
@@ -157,7 +157,7 @@ npx office-addin-debugging start manifest.xml
 ## 4. 測試流程
 
 1.  確認後端 (`python app.py`) 正在執行。
-2.  確認前端伺服器 (Port 3000) 正在執行。
+2.  確認前端伺服器 (Port 3010) 正在執行。
 3.  在 Word 中開啟 "OfficeXAdd" 側邊欄。
 4.  在文件中輸入一段文字，例如：「這是一個測試文句，請幫我改寫。」
 5.  選取這段文字。

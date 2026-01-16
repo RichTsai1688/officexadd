@@ -30,7 +30,7 @@ stop_pid "$PID_DIR/frontend.pid"
 stop_pid "$PID_DIR/backend.pid"
 
 # Fallback: ensure ports are freed even if pid files are stale or missing
-force_stop_port 3000
-force_stop_port 5001
+force_stop_port 3010
+force_stop_port 5010
 
 echo "Stopped background servers (if running)."

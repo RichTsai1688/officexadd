@@ -587,7 +587,7 @@ async function rewriteText() {
 
             let response;
             try {
-                response = await fetch("http://localhost:5001/rewrite", {
+                response = await fetch("http://localhost:5010/rewrite", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -684,7 +684,7 @@ async function refreshModelOptions(provider) {
     modelStatus.textContent = "Loading available models...";
 
     try {
-        const response = await fetch(`http://localhost:5001/models?provider=${encodeURIComponent(provider)}`);
+        const response = await fetch(`http://localhost:5010/models?provider=${encodeURIComponent(provider)}`);
         if (!response.ok) {
             throw new Error(`Server returned ${response.status}`);
         }

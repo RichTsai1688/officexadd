@@ -9,19 +9,19 @@
   <!-- 必須是 GUID -->
   <Id>7b0b1216-8e8a-4cf3-8720-3211e7259adb</Id>
 
-  <Version>1.0.0.0</Version>
+  <Version>1.0.5.0</Version>
   <ProviderName>Example Inc.</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
   <DisplayName DefaultValue="OfficeXAdd" />
   <Description DefaultValue="AI-powered text rewriting assistant for Office" />
 
-  <IconUrl DefaultValue="http://localhost:3000/assets/icon-32.png" />
-  <HighResolutionIconUrl DefaultValue="http://localhost:3000/assets/icon-80.png" />
+  <IconUrl DefaultValue="http://localhost:3010/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="http://localhost:3010/assets/icon-80.png" />
   <SupportUrl DefaultValue="http://www.example.com/support" />
 
   <AppDomains>
-    <AppDomain>http://localhost:3000</AppDomain>
+    <AppDomain>http://localhost:3010</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -30,7 +30,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="http://localhost:3000/taskpane.html" />
+    <SourceLocation DefaultValue="http://localhost:3010/taskpane.html" />
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -107,15 +107,15 @@
     <!-- 靜態資源：Icons / Url / 文案 -->
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="http://localhost:3000/assets/icon-16.png" />
-        <bt:Image id="Icon.32x32" DefaultValue="http://localhost:3000/assets/icon-32.png" />
-        <bt:Image id="Icon.80x80" DefaultValue="http://localhost:3000/assets/icon-80.png" />
+        <bt:Image id="Icon.16x16" DefaultValue="http://localhost:3010/assets/icon-16.png" />
+        <bt:Image id="Icon.32x32" DefaultValue="http://localhost:3010/assets/icon-32.png" />
+        <bt:Image id="Icon.80x80" DefaultValue="http://localhost:3010/assets/icon-80.png" />
       </bt:Images>
 
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812" />
-        <bt:Url id="Commands.Url" DefaultValue="http://localhost:3000/commands.html" />
-        <bt:Url id="Taskpane.Url" DefaultValue="http://localhost:3000/taskpane.html" />
+        <bt:Url id="Commands.Url" DefaultValue="http://localhost:3010/commands.html" />
+        <bt:Url id="Taskpane.Url" DefaultValue="http://localhost:3010/taskpane.html" />
       </bt:Urls>
 
       <bt:ShortStrings>

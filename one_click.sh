@@ -40,12 +40,12 @@ npm install
 mkdir -p "$PID_DIR"
 
 if command -v lsof >/dev/null 2>&1; then
-    if lsof -nP -iTCP:5001 -sTCP:LISTEN >/dev/null 2>&1; then
-        echo "Port 5001 is already in use. Stop the current process or change the backend port."
+    if lsof -nP -iTCP:5010 -sTCP:LISTEN >/dev/null 2>&1; then
+        echo "Port 5010 is already in use. Stop the current process or change the backend port."
         exit 1
     fi
-    if lsof -nP -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1; then
-        echo "Port 3000 is already in use. Stop the current process or change the frontend port."
+    if lsof -nP -iTCP:3010 -sTCP:LISTEN >/dev/null 2>&1; then
+        echo "Port 3010 is already in use. Stop the current process or change the frontend port."
         exit 1
     fi
 fi
@@ -55,7 +55,7 @@ echo "Starting backend..."
 echo $! > "$PID_DIR/backend.pid"
 
 echo "Starting frontend..."
-(cd "$FRONTEND_DIR" && npx http-server -p 3000 --cors > "$FRONTEND_DIR/frontend.log" 2>&1 & echo $! > "$PID_DIR/frontend.pid")
+(cd "$FRONTEND_DIR" && npx http-server -p 3010 --cors > "$FRONTEND_DIR/frontend.log" 2>&1 & echo $! > "$PID_DIR/frontend.pid")
 
 echo "Starting sideload..."
 npx office-addin-debugging start frontend/manifest.xml
