@@ -2,6 +2,9 @@ let isProcessing = false;
 let currentController = null;
 let activeRequestId = 0;
 let activeTimeouts = new Set();
+const OFFICEXADD_CONFIG = window.__OFFICEXADD_CONFIG__ || {};
+const OFFICEXADD_API_BASE_URL = (OFFICEXADD_CONFIG.apiBaseUrl || window.location.origin || "https://fcu.labelnine.app:2053").replace(/\/$/, "");
+const OFFICEXADD_API_TOKEN = OFFICEXADD_CONFIG.apiToken || "";
 const WEB_SEARCH_TIMEOUT_MS = 120000;
 const DEFAULT_TIMEOUT_MS = 45000;
 const MAX_CONTEXT_CHARS = 12000;
@@ -13,6 +16,15 @@ const CONTEXT_MODE_FULL = "full";
 const CONTEXT_MODE_CHARS = "chars";
 const CONTEXT_MODE_PAGES = "pages";
 const APPROX_PAGE_CHARS = 1500;
+
+function buildApiHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    if (OFFICEXADD_API_TOKEN) {
+        headers.Authorization = `Bearer ${OFFICEXADD_API_TOKEN}`;
+        headers["X-API-Key"] = OFFICEXADD_API_TOKEN;
+    }
+    return headers;
+}
 
 function setStatus(message) {
     const statusBar = document.getElementById("statusBar");
@@ -587,11 +599,9 @@ async function rewriteText() {
 
             let response;
             try {
-                response = await fetch("http://localhost:5010/rewrite", {
+                response = await fetch(`${OFFICEXADD_API_BASE_URL}/api/rewrite`, {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
+                    headers: buildApiHeaders(),
                     body: JSON.stringify(payload),
                     signal: currentController.signal,
                 });
@@ -684,7 +694,9 @@ async function refreshModelOptions(provider) {
     modelStatus.textContent = "Loading available models...";
 
     try {
-        const response = await fetch(`http://localhost:5010/models?provider=${encodeURIComponent(provider)}`);
+        const response = await fetch(`${OFFICEXADD_API_BASE_URL}/api/models?provider=${encodeURIComponent(provider)}`, {
+            headers: buildApiHeaders()
+        });
         if (!response.ok) {
             throw new Error(`Server returned ${response.status}`);
         }
