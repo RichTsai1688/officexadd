@@ -2,6 +2,7 @@ let isProcessing = false;
 let currentController = null;
 let activeRequestId = 0;
 let activeTimeouts = new Set();
+let lastRewriteResult = null;
 const OFFICEXADD_CONFIG = window.__OFFICEXADD_CONFIG__ || {};
 const OFFICEXADD_API_BASE_URL = (OFFICEXADD_CONFIG.apiBaseUrl || window.location.origin || "https://fcu.labelnine.app:2053").replace(/\/$/, "");
 const OFFICEXADD_API_TOKEN = OFFICEXADD_CONFIG.apiToken || "";
@@ -16,6 +17,83 @@ const CONTEXT_MODE_FULL = "full";
 const CONTEXT_MODE_CHARS = "chars";
 const CONTEXT_MODE_PAGES = "pages";
 const APPROX_PAGE_CHARS = 1500;
+let currentHost = "office";
+
+const HOST_CONFIG = {
+    office: {
+        appTitle: "AI Text Rewriter",
+        subtitle: "Rewrite selected text with the tone you choose.",
+        inputLabel: "引入內容",
+        inputPlaceholder: "Enter text to rewrite...",
+        rewriteButton: "Rewrite & Replace",
+        resultTitle: "Rewritten Text",
+        insertButton: "填入",
+        skipPasteHelp: "勾選後只顯示結果，不會自動覆蓋目前選取內容。",
+        emptyState: "Please enter instructions or select text in Office.",
+        selectionLoading: "Reading selection...",
+        selectionMissing: "Please enter instructions or select text in Office.",
+        generating: "Generating from instruction...",
+        inserting: "Inserting into Office...",
+        inserted: "Inserted into Office.",
+        replacing: "Replacing selection in Office...",
+        replaced: "Content replaced in Office!",
+        replaceError: "Error replacing content",
+    },
+    word: {
+        appTitle: "AI Text Rewriter for Word",
+        subtitle: "Rewrite selected Word text with the tone you choose.",
+        inputLabel: "引入文章",
+        inputPlaceholder: "Enter text from Word...",
+        rewriteButton: "Rewrite & Replace",
+        resultTitle: "Rewritten Text",
+        insertButton: "填入",
+        skipPasteHelp: "勾選後只顯示結果，不會自動取代 Word 內選取文字。",
+        emptyState: "Please enter instructions or select text in Word.",
+        selectionLoading: "Reading selection...",
+        selectionMissing: "Please enter instructions or select text in Word.",
+        generating: "Generating from instruction...",
+        inserting: "Inserting into Word...",
+        inserted: "Inserted into Word.",
+        replacing: "Replacing selection in Word...",
+        replaced: "Text replaced in Word!",
+        replaceError: "Error replacing text",
+    },
+    powerpoint: {
+        appTitle: "AI Text Rewriter for PowerPoint",
+        subtitle: "Rewrite selected slide text and send the polished copy back into PowerPoint.",
+        inputLabel: "引入投影片文字",
+        inputPlaceholder: "Enter text from PowerPoint...",
+        rewriteButton: "Rewrite & Insert",
+        resultTitle: "Rewritten Slide Text",
+        insertButton: "插入投影片",
+        skipPasteHelp: "勾選後只顯示結果，不會自動覆蓋目前投影片選取的文字方塊內容。",
+        emptyState: "Please enter instructions or select text in PowerPoint.",
+        selectionLoading: "Reading selected slide text...",
+        selectionMissing: "Please enter instructions or select text in PowerPoint.",
+        generating: "Generating slide text...",
+        inserting: "Inserting into PowerPoint...",
+        inserted: "Inserted into PowerPoint.",
+        replacing: "Replacing selected slide text...",
+        replaced: "Text replaced in PowerPoint!",
+        replaceError: "Error replacing slide text",
+    },
+};
+
+function getHostConfig() {
+    return HOST_CONFIG[currentHost] || HOST_CONFIG.office;
+}
+
+function isWordHost() {
+    return currentHost === "word";
+}
+
+function isPowerPointHost() {
+    return currentHost === "powerpoint";
+}
+
+function supportsDocumentContext() {
+    return isWordHost();
+}
 
 function buildApiHeaders() {
     const headers = { "Content-Type": "application/json" };
@@ -30,6 +108,37 @@ function setStatus(message) {
     const statusBar = document.getElementById("statusBar");
     if (statusBar) {
         statusBar.textContent = message;
+    }
+}
+
+function setElementText(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function setHostSpecificText() {
+    const hostConfig = getHostConfig();
+    setElementText("appTitle", hostConfig.appTitle);
+    setElementText("appSubtitle", hostConfig.subtitle);
+    setElementText("inputLabel", hostConfig.inputLabel);
+    setElementText("resultTitle", hostConfig.resultTitle);
+    setElementText("skipPasteHelp", hostConfig.skipPasteHelp);
+
+    const inputText = document.getElementById("inputText");
+    if (inputText) {
+        inputText.placeholder = hostConfig.inputPlaceholder;
+    }
+
+    const rewriteBtn = document.getElementById("rewriteBtn");
+    if (rewriteBtn && !isProcessing) {
+        rewriteBtn.textContent = hostConfig.rewriteButton;
+    }
+
+    const insertBtn = document.getElementById("insertBtn");
+    if (insertBtn) {
+        insertBtn.textContent = hostConfig.insertButton;
     }
 }
 
@@ -66,9 +175,16 @@ function setResultContent(content, options = {}) {
     }
 }
 
+function htmlToPlainText(html) {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    return container.textContent.trim();
+}
+
 function setProcessingState(active) {
     isProcessing = active;
     const button = document.getElementById("rewriteBtn");
+    const hostConfig = getHostConfig();
     if (!button) {
         return;
     }
@@ -76,7 +192,7 @@ function setProcessingState(active) {
         button.textContent = "Stop";
         button.classList.add("is-stop");
     } else {
-        button.textContent = "Rewrite & Replace";
+        button.textContent = hostConfig.rewriteButton;
         button.classList.remove("is-stop");
         currentController = null;
     }
@@ -112,12 +228,21 @@ function cleanupResources() {
 
 function updateContextControls() {
     const modeSelect = document.getElementById("contextMode");
+    const contextCard = document.getElementById("contextCard");
     const sizeRow = document.getElementById("contextSizeRow");
     const unitSpan = document.getElementById("contextUnit");
     const help = document.getElementById("contextHelp");
-    if (!modeSelect || !sizeRow || !unitSpan || !help) {
+    if (!modeSelect || !contextCard || !sizeRow || !unitSpan || !help) {
         return;
     }
+    if (!supportsDocumentContext()) {
+        contextCard.classList.add("context-hidden");
+        modeSelect.value = CONTEXT_MODE_NONE;
+        sizeRow.classList.add("context-hidden");
+        help.textContent = "PowerPoint 目前只會讀取選取的文字，不會抓整份投影片上下文。";
+        return;
+    }
+    contextCard.classList.remove("context-hidden");
     const mode = modeSelect.value;
     if (mode === CONTEXT_MODE_CHARS) {
         sizeRow.classList.remove("context-hidden");
@@ -132,7 +257,7 @@ function updateContextControls() {
         help.textContent = "會把全文送出，並標記目前游標或選取區間。";
     } else {
         sizeRow.classList.add("context-hidden");
-        help.textContent = "不使用 Word 上下文。";
+        help.textContent = "不使用文件上下文。";
     }
 }
 
@@ -148,7 +273,7 @@ function parseContextSize() {
     return parsed;
 }
 
-function getSelectedTextFallback() {
+function getSelectedTextFromOffice() {
     return new Promise((resolve) => {
         if (!Office || !Office.context || !Office.context.document) {
             resolve("");
@@ -164,10 +289,18 @@ function getSelectedTextFallback() {
     });
 }
 
-async function getWordSnapshot(options = {}) {
+async function getPowerPointSnapshot() {
+    const fallbackText = await getSelectedTextFromOffice();
+    return { selectionText: fallbackText, documentText: "", paragraphHints: [] };
+}
+
+async function getDocumentSnapshot(options = {}) {
     const includeDocumentText = Boolean(options.includeDocumentText);
-    if (typeof Word === "undefined") {
-        const fallbackText = await getSelectedTextFallback();
+    if (isPowerPointHost()) {
+        return getPowerPointSnapshot();
+    }
+    if (!isWordHost() || typeof Word === "undefined") {
+        const fallbackText = await getSelectedTextFromOffice();
         return { selectionText: fallbackText, documentText: "", paragraphHints: [] };
     }
     try {
@@ -199,7 +332,7 @@ async function getWordSnapshot(options = {}) {
         });
     } catch (error) {
         console.warn("Word snapshot failed", error);
-        const fallbackText = await getSelectedTextFallback();
+        const fallbackText = await getSelectedTextFromOffice();
         return { selectionText: fallbackText, documentText: "", paragraphHints: [] };
     }
 }
@@ -403,7 +536,7 @@ function buildContextFromSnapshot(snapshot, mode, size) {
     return { contextText: "", note: contextNote };
 }
 
-function formatRequestError(error, didTimeout) {
+function formatRequestError(error, didTimeout, provider) {
     if (didTimeout) {
         return "Request timed out. Try again or disable web search.";
     }
@@ -413,6 +546,13 @@ function formatRequestError(error, didTimeout) {
     const message = error && error.message ? error.message : "Unknown error";
     if (message.includes("Load failed") || message.includes("Failed to fetch")) {
         return "Network error. Please check the backend service and try again.";
+    }
+    const lowered = message.toLowerCase();
+    if (lowered.includes("unauthorized") || lowered.includes("api error: 401")) {
+        if (provider === "ollama") {
+            return "Authorization failed for Ollama. Check AI_BASE_URL / AI_API_KEY on the server, or switch the provider to OpenAI.";
+        }
+        return "Authorization failed for the selected provider. Check the server-side API credentials and try again.";
     }
     return `Error: ${message}`;
 }
@@ -454,28 +594,61 @@ async function copyResult() {
     }
 }
 
-function insertResultIntoDocument() {
+function replaceSelectedContent(content, callbacks = {}) {
+    const { onSuccess, onError } = callbacks;
+    const payload = isWordHost() ? content.html : content.text;
+    const coercionType = isWordHost() ? Office.CoercionType.Html : Office.CoercionType.Text;
+    Office.context.document.setSelectedDataAsync(payload, { coercionType }, (asyncResult) => {
+        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+            if (onError) {
+                onError(asyncResult.error);
+            }
+            return;
+        }
+        if (onSuccess) {
+            onSuccess();
+        }
+    });
+}
+
+function getResultPayload() {
+    if (lastRewriteResult && lastRewriteResult.text) {
+        return lastRewriteResult;
+    }
     const resultContent = document.getElementById("resultContent");
     if (!resultContent) {
-        return;
+        return null;
     }
     const html = resultContent.innerHTML.trim();
     const text = resultContent.textContent.trim();
     if (!text) {
+        return null;
+    }
+    return { html, text };
+}
+
+function insertResultIntoDocument() {
+    const hostConfig = getHostConfig();
+    const payload = getResultPayload();
+    if (!payload) {
         return;
     }
-    setStatus("Inserting into Word...");
-    Office.context.document.setSelectedDataAsync(html, { coercionType: Office.CoercionType.Html }, (asyncResult) => {
-        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-            setStatus(`Insert failed: ${asyncResult.error.message}`);
-        } else {
-            setStatus("Inserted into Word.");
-        }
+    setStatus(hostConfig.inserting);
+    replaceSelectedContent(payload, {
+        onSuccess: () => setStatus(hostConfig.inserted),
+        onError: (error) => setStatus(`Insert failed: ${error.message}`),
     });
 }
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
+        currentHost = "word";
+    } else if (info.host === Office.HostType.PowerPoint) {
+        currentHost = "powerpoint";
+    }
+    setHostSpecificText();
+
+    if (info.host === Office.HostType.Word || info.host === Office.HostType.PowerPoint) {
         // 使用 cleanupResources 而不是 cancelCurrentRequest 確保完全清理
         window.addEventListener("unload", cleanupResources);
         window.addEventListener("beforeunload", cleanupResources);
@@ -492,8 +665,9 @@ Office.onReady((info) => {
         const contextMode = document.getElementById("contextMode");
         if (contextMode) {
             contextMode.addEventListener("change", updateContextControls);
-            updateContextControls();
         }
+        updateContextControls();
+
         const providerSelect = document.getElementById("providerSelect");
         if (providerSelect) {
             providerSelect.addEventListener("change", () => refreshModelOptions(providerSelect.value));
@@ -508,6 +682,7 @@ async function rewriteText() {
         return;
     }
 
+    const hostConfig = getHostConfig();
     const inputTextElement = document.getElementById("inputText");
     const inputText = inputTextElement ? inputTextElement.value : "";
     const instructionText = document.getElementById("instructionText").value;
@@ -515,7 +690,8 @@ async function rewriteText() {
     const modelChoice = document.getElementById("modelInput").value.trim();
     const useWebSearch = document.getElementById("webSearchToggle").checked;
     const skipPaste = document.getElementById("skipPasteToggle").checked;
-    const contextMode = document.getElementById("contextMode").value;
+    const requestedContextMode = document.getElementById("contextMode").value;
+    const contextMode = supportsDocumentContext() ? requestedContextMode : CONTEXT_MODE_NONE;
     const contextSize = parseContextSize();
     const requestId = activeRequestId + 1;
     activeRequestId = requestId;
@@ -523,14 +699,15 @@ async function rewriteText() {
 
     // If no manual input, we'll try to get selection, but we need to handle the case where both are empty later
 
+    lastRewriteResult = null;
     setResultContent("Processing...", { isHtml: false, allowActions: false });
     setProcessingState(true);
     setStatus("Preparing request...");
 
     try {
-        setStatus("Reading selection...");
+        setStatus(hostConfig.selectionLoading);
         const needsDocument = contextMode !== CONTEXT_MODE_NONE;
-        const snapshot = await getWordSnapshot({ includeDocumentText: needsDocument });
+        const snapshot = await getDocumentSnapshot({ includeDocumentText: needsDocument });
         let textToRewrite = inputText;
         if (snapshot.selectionText && snapshot.selectionText.trim()) {
             textToRewrite = snapshot.selectionText;
@@ -540,7 +717,7 @@ async function rewriteText() {
         }
 
         if (!textToRewrite.trim() && !instructionText.trim()) {
-            setResultContent("Please enter instructions or select text in Word.", { isHtml: false, allowActions: false });
+            setResultContent(hostConfig.selectionMissing, { isHtml: false, allowActions: false });
             setProcessingState(false);
             setStatus("Idle");
             return;
@@ -560,7 +737,7 @@ async function rewriteText() {
         }
 
         if (!textToRewrite.trim()) {
-            setStatus("Generating from instruction...");
+            setStatus(hostConfig.generating);
         }
 
         // Call backend API
@@ -632,38 +809,46 @@ async function rewriteText() {
             }
 
             // Display result
+            lastRewriteResult = { html: newText, text: htmlToPlainText(newText) };
             setResultContent(newText, { isHtml: true, allowActions: true });
 
-            // Replace selection in Word
+            // Replace selection in the current Office host
             if (skipPaste) {
                 setStatus("Done.");
                 setProcessingState(false);
                 return;
             }
-            setStatus("Replacing selection in Word...");
-            Office.context.document.setSelectedDataAsync(newText, { coercionType: Office.CoercionType.Html }, (asyncResult) => {
-                if (requestId !== activeRequestId) {
-                    setProcessingState(false);
-                    return;
-                }
-                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                    setResultContent(`${newText}<br><span style="color:red">Error replacing text: ${asyncResult.error.message}</span>`, { isHtml: true, allowActions: true });
-                    setStatus("Error replacing text.");
-                } else {
-                    setResultContent(`${newText}<br><span style="color:green">Text replaced in Word!</span>`, { isHtml: true, allowActions: true });
+            setStatus(hostConfig.replacing);
+            replaceSelectedContent({ html: newText, text: htmlToPlainText(newText) }, {
+                onSuccess: () => {
+                    if (requestId !== activeRequestId) {
+                        setProcessingState(false);
+                        return;
+                    }
+                    setResultContent(`${newText}<br><span style="color:green">${hostConfig.replaced}</span>`, { isHtml: true, allowActions: true });
                     if (inputTextElement) {
                         inputTextElement.value = "";
                     }
                     setStatus("Done.");
-                }
-                setProcessingState(false);
+                    setProcessingState(false);
+                },
+                onError: (error) => {
+                    if (requestId !== activeRequestId) {
+                        setProcessingState(false);
+                        return;
+                    }
+                    setResultContent(`${newText}<br><span style="color:red">${hostConfig.replaceError}: ${error.message}</span>`, { isHtml: true, allowActions: true });
+                    setStatus(hostConfig.replaceError);
+                    setProcessingState(false);
+                },
             });
 
         } catch (apiError) {
             if (requestId !== activeRequestId || !isProcessing) {
                 return;
             }
-            const message = formatRequestError(apiError, didTimeout);
+            const message = formatRequestError(apiError, didTimeout, providerChoice);
+            lastRewriteResult = null;
             setResultContent(message, { isHtml: false, allowActions: false });
             if (message.startsWith("Request timed out")) {
                 setStatus("Request timed out.");
@@ -677,6 +862,7 @@ async function rewriteText() {
             setProcessingState(false);
         }
     } catch (error) {
+        lastRewriteResult = null;
         setResultContent(`Error: ${error.message}`, { isHtml: false, allowActions: false });
         setStatus("Unexpected error.");
         setProcessingState(false);

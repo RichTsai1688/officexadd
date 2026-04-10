@@ -1,8 +1,8 @@
-# OfficeXAdd - Word AI Rewrite Assistant
+# OfficeXAdd - Word / PowerPoint AI Rewrite Assistant
 
-This is an Office.js add-in for Microsoft Word that provides AI-powered text rewriting capabilities using OpenAI's GPT-4o-mini model.
+This is an Office.js add-in for Microsoft Word and Microsoft PowerPoint that provides AI-powered text rewriting capabilities using OpenAI-compatible models.
 
-**Key Feature**: Eliminates the "Copy-Paste" workflow. Select text in Word, give an instruction, and the AI directly replaces the selection with the polished version.
+**Key Feature**: Eliminates the "Copy-Paste" workflow. Select text in Word or PowerPoint, give an instruction, and the AI directly replaces the selection with the polished version.
 
 ## Project Structure
 
@@ -27,7 +27,7 @@ officexadd/
 - **Python 3.x** (for Backend)
 - **Node.js** (Recommended for Frontend & Debugging)
 - **OpenAI API key**
-- **Microsoft Word** (Mac or Windows)
+- **Microsoft Word or Microsoft PowerPoint** (Mac or Windows)
 
 ## Quick Start (Local Development)
 
@@ -80,7 +80,7 @@ For a detailed guide in Chinese, please see [local_setup_guide_zh.md](local_setu
     python3 -m http.server 3010
     ```
 
-### 3. Sideload to Word
+### 3. Sideload to Word or PowerPoint
 
 **Option A: Automatic (Node.js required)**
 From the project root:
@@ -88,23 +88,26 @@ From the project root:
 npx office-addin-debugging start frontend/manifest.xml
 ```
 
+For PowerPoint, sideload `frontend/manifest-powerpoint.xml` instead.
+
 **Option B: Manual (Mac)**
-1.  Copy `frontend/manifest.xml` to `/Users/<username>/Library/Containers/com.microsoft.Word/Data/Documents/wef`.
-2.  Restart Word.
+1.  Copy `frontend/manifest.xml` to `/Users/<username>/Library/Containers/com.microsoft.Word/Data/Documents/wef` for Word, or copy `frontend/manifest-powerpoint.xml` to `/Users/<username>/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef` for PowerPoint.
+2.  Restart the Office app you are testing.
 3.  Go to **Insert** > **My Add-ins** > **Developer Add-ins** > **OfficeXAdd**.
 
 ## Usage Guide
 
 1.  **Open the Taskpane**: Click the **"Show AI Assistant"** button on the **Home** tab (or use `Ctrl+Alt+I`).
-2.  **Select Text**: Highlight any text in your Word document that you want to rewrite.
+2.  **Select Text**: Highlight any text in your Word document or PowerPoint text box that you want to rewrite.
 3.  **Give Instructions (Optional)**: In the taskpane, type what you want the AI to do (e.g., "Make it more professional", "Fix grammar", "Translate to English").
 4.  **Rewrite & Replace**: Click the button.
     - The AI will process your text.
-    - The selected text in Word will be **automatically replaced** with the new version.
+    - The selected text in Word or PowerPoint will be **automatically replaced** with the new version.
     - Formatting (bold, lists, etc.) is preserved/applied where possible.
     - Use the **AI Provider** dropdown to switch between the official OpenAI endpoint and an OpenAI-compatible host such as Ollama (which requires `AI_BASE_URL`/`AI_API_KEY` in `.env`).
     - The **Model (optional)** field now pulls a provider-specific list of models from the backend; change the provider to refresh the suggestion list or type any other name you need.
     - Enable **Use web search** to let the backend call the provider's web search tool (if supported by the chosen model/provider).
+    - In PowerPoint, the add-in rewrites the selected slide text as plain text; document-wide context modes are disabled there.
 
 ## Troubleshooting
 

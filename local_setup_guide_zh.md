@@ -1,6 +1,6 @@
 # 本機測試與安裝指南 (Local Setup Guide)
 
-這份指南將協助您在不使用 Docker 的情況下，於本機執行後端伺服器，並將 Office Add-in 安裝 (Sideload) 到 Word 中。
+這份指南將協助您在不使用 Docker 的情況下，於本機執行後端伺服器，並將 Office Add-in 安裝 (Sideload) 到 Word 或 PowerPoint 中。
 
 ## 一鍵安裝與啟動 (Mac/Linux)
 
@@ -110,34 +110,42 @@ http-server -p 3010 --cors
 ---
 
 **為了最順暢的體驗，建議使用 Node.js 的 `office-addin-debugging`**:
-如果您安裝好了 Node.js，直接執行這個指令最方便，它會自動處理憑證並開啟 Word：
+如果您安裝好了 Node.js，直接執行這個指令最方便，它會自動處理憑證並開啟 Office：
 ```bash
 npx office-addin-debugging start manifest.xml
 ```
 
+若要測試 PowerPoint，請改用 `manifest-powerpoint.xml`。
+
 ---
 
-## 3. 如何匯入 Word (Sideloading on Mac)
+## 3. 如何匯入 Word / PowerPoint (Sideloading on Mac)
 
-這是您最關心的部分：如何把這個 Add-in 放進 Word 裡測試。
+這是您最關心的部分：如何把這個 Add-in 放進 Word 或 PowerPoint 裡測試。
 
-### 方法一：直接將 manifest.xml 放入特定資料夾 (最推薦 Mac 使用)
+### 方法一：直接將 manifest 檔放入特定資料夾 (最推薦 Mac 使用)
 
-1.  **找到 Weff 檔案夾**：
-    打開 Finder，按下 `Cmd + Shift + G`，貼上以下路徑：
+1.  **找到 wef 檔案夾**：
+    打開 Finder，按下 `Cmd + Shift + G`，依您要測試的 Office App 貼上以下路徑：
+    - Word:
     ```
     /Users/rich_imac/Library/Containers/com.microsoft.Word/Data/Documents/wef
     ```
+    - PowerPoint:
+    ```
+    /Users/rich_imac/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef
+    ```
     *(如果 `wef` 資料夾不存在，請手動建立它)*
 
-2.  **複製 manifest.xml**：
-    將 `/Users/rich_imac/Downloads/officexadd/frontend/manifest.xml` 這個檔案複製到上面的 `wef` 資料夾中。
+2.  **複製對應的 manifest**：
+    - Word: 將 `/Users/rich_imac/Downloads/officexadd/frontend/manifest.xml` 複製到對應的 `wef` 資料夾。
+    - PowerPoint: 將 `/Users/rich_imac/Downloads/officexadd/frontend/manifest-powerpoint.xml` 複製到對應的 `wef` 資料夾。
 
-3.  **重啟 Word**：
-    完全關閉 Word 再重新打開。
+3.  **重啟 Office App**：
+    完全關閉 Word 或 PowerPoint 再重新打開。
 
 4.  **找到 Add-in**：
-    - 開啟一個空白文件。
+    - 開啟一個空白文件或簡報。
     - 點選上方選單的 **「插入 (Insert)」** > **「我的增益集 (My Add-ins)」**。
     - 點選上方的小箭頭或是 **「開發人員 (Developer)」** 分頁 (如果有出現)。
     - 您應該會看到 **"OfficeXAdd"** 出現在列表中。點選它即可開啟側邊欄。
@@ -150,7 +158,7 @@ npx office-addin-debugging start manifest.xml
     ```bash
     npx office-addin-debugging start manifest.xml
     ```
-2.  這會自動啟動 Word 並載入您的 Add-in。
+2.  這會自動啟動對應的 Office App 並載入您的 Add-in。
 
 ---
 
@@ -158,12 +166,13 @@ npx office-addin-debugging start manifest.xml
 
 1.  確認後端 (`python app.py`) 正在執行。
 2.  確認前端伺服器 (Port 3010) 正在執行。
-3.  在 Word 中開啟 "OfficeXAdd" 側邊欄。
-4.  在文件中輸入一段文字，例如：「這是一個測試文句，請幫我改寫。」
+3.  在 Word 或 PowerPoint 中開啟 "OfficeXAdd" 側邊欄。
+4.  在文件或投影片文字方塊中輸入一段文字，例如：「這是一個測試文句，請幫我改寫。」
 5.  選取這段文字。
 6.  在側邊欄的 Instructions 輸入：「變得更專業一點」。
 7.  按下 **"Rewrite & Replace"**。
-8.  文字應該會自動變更！
-9.  在側邊欄的 **AI Provider** 下拉選單中選擇官方 OpenAI 或 Ollama (選 Ollama 時請先在 `.env` 填好 `AI_BASE_URL` 與 `AI_API_KEY`)，需要不同模型時可在「Model (optional)」欄位輸入名稱。
-10. 「Model (optional)」欄位會從後端讀取並顯示該提供者目前可用的模型，切換提供者會重新載入選單內容，但仍可自行輸入任意模型名稱。
-11. 若需要網路搜尋，勾選 **Use web search**，後端會呼叫對應提供者的網頁搜尋工具（前提是該模型/服務支援此能力）。
+8.  文字應該會自動變更。
+9.  若您在 PowerPoint 測試，請先選取文字方塊中的文字；目前 PowerPoint 版本不會抓整份投影片做上下文，只會改寫選到的文字。
+10. 在側邊欄的 **AI Provider** 下拉選單中選擇官方 OpenAI 或 Ollama (選 Ollama 時請先在 `.env` 填好 `AI_BASE_URL` 與 `AI_API_KEY`)，需要不同模型時可在「Model (optional)」欄位輸入名稱。
+11. 「Model (optional)」欄位會從後端讀取並顯示該提供者目前可用的模型，切換提供者會重新載入選單內容，但仍可自行輸入任意模型名稱。
+12. 若需要網路搜尋，勾選 **Use web search**，後端會呼叫對應提供者的網頁搜尋工具（前提是該模型/服務支援此能力）。
