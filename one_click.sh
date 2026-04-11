@@ -31,6 +31,8 @@ if [[ ! -f "$BACKEND_DIR/.env" ]]; then
     exit 1
 fi
 
+"$ROOT_DIR/render_frontend_assets.sh"
+
 echo "Installing backend dependencies..."
 "$PYTHON_BIN" -m pip install -r "$BACKEND_DIR/requirements.txt"
 

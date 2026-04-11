@@ -3,6 +3,7 @@ version: '3.8'
 services:
   backend:
     build: ./backend
+    restart: unless-stopped
     expose:
       - "5010"
     environment:
@@ -12,21 +13,38 @@ services:
       - MODEL_NAME=${MODEL_NAME}
       - OLLAMA_WEB_SEARCH_API_KEY=${OLLAMA_WEB_SEARCH_API_KEY}
       - OLLAMA_WEB_SEARCH_URL=${OLLAMA_WEB_SEARCH_URL}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_IMAGE_MODEL=${GOOGLE_IMAGE_MODEL}
+      - GOOGLE_IMAGE_ASPECT_RATIO=${GOOGLE_IMAGE_ASPECT_RATIO}
+      - GOOGLE_IMAGE_SIZE=${GOOGLE_IMAGE_SIZE}
+      - GOOGLE_API_BASE_URL=${GOOGLE_API_BASE_URL}
     volumes:
       - ./backend:/app
 
   nginx:
     image: nginx:alpine
+    restart: unless-stopped
     depends_on:
       - backend
     environment:
       - OFFICEXADD_API_TOKEN=${OFFICEXADD_API_TOKEN}
       - OFFICEXADD_PUBLIC_ORIGIN=${OFFICEXADD_PUBLIC_ORIGIN}
-    ports:
-      - "2053:443"
+    expose:
+      - "80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./frontend:/usr/share/nginx/html
       - ./nginx-start.sh:/docker-entrypoint.d/docker-entrypoint.sh
-      - /data2/codespace/ssl_pem/labelnine_domain/certs:/etc/ssl/custom:ro
     command: ["/bin/sh", "/docker-entrypoint.d/docker-entrypoint.sh"]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN}

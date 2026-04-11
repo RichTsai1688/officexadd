@@ -3,7 +3,7 @@
   "version": "1.0.5",
   "description": "Office Add-in",
   "scripts": {
-    "start": "office-addin-debugging start frontend/manifest.xml",
+    "start": "bash ./render_frontend_assets.sh && office-addin-debugging start frontend/manifest.xml",
     "one-click": "bash ./one_click.sh"
   },
   "devDependencies": {

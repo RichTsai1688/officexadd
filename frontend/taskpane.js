@@ -2,12 +2,15 @@ let isProcessing = false;
 let currentController = null;
 let activeRequestId = 0;
 let activeTimeouts = new Set();
-let lastRewriteResult = null;
+let latestImageResult = null;
+let latestTextResult = null;
+let currentHost = "office";
 const OFFICEXADD_CONFIG = window.__OFFICEXADD_CONFIG__ || {};
-const OFFICEXADD_API_BASE_URL = (OFFICEXADD_CONFIG.apiBaseUrl || window.location.origin || "https://fcu.labelnine.app:2053").replace(/\/$/, "");
+const OFFICEXADD_API_BASE_URL = (OFFICEXADD_CONFIG.apiBaseUrl || window.location.origin || "").replace(/\/$/, "");
 const OFFICEXADD_API_TOKEN = OFFICEXADD_CONFIG.apiToken || "";
 const WEB_SEARCH_TIMEOUT_MS = 120000;
 const DEFAULT_TIMEOUT_MS = 45000;
+const IMAGE_TIMEOUT_MS = 120000;
 const MAX_CONTEXT_CHARS = 12000;
 const CONTEXT_MARKER_START = "[[EDIT_START]]";
 const CONTEXT_MARKER_END = "[[EDIT_END]]";
@@ -17,31 +20,31 @@ const CONTEXT_MODE_FULL = "full";
 const CONTEXT_MODE_CHARS = "chars";
 const CONTEXT_MODE_PAGES = "pages";
 const APPROX_PAGE_CHARS = 1500;
-let currentHost = "office";
+const MODE_TEXT = "text";
+const MODE_IMAGE = "image";
+const UI_PREFERENCES_KEY_PREFIX = "officexadd_ui_preferences_v1";
 
 const HOST_CONFIG = {
     office: {
-        appTitle: "AI Text Rewriter",
-        subtitle: "Rewrite selected text with the tone you choose.",
+        appTitle: "AI Assistant",
+        subtitle: "Rewrite selected content or generate images for Office.",
         inputLabel: "引入內容",
         inputPlaceholder: "Enter text to rewrite...",
         rewriteButton: "Rewrite & Replace",
-        resultTitle: "Rewritten Text",
+        resultTitle: "Rewritten Content",
         insertButton: "填入",
         skipPasteHelp: "勾選後只顯示結果，不會自動覆蓋目前選取內容。",
         emptyState: "Please enter instructions or select text in Office.",
         selectionLoading: "Reading selection...",
-        selectionMissing: "Please enter instructions or select text in Office.",
-        generating: "Generating from instruction...",
-        inserting: "Inserting into Office...",
-        inserted: "Inserted into Office.",
         replacing: "Replacing selection in Office...",
         replaced: "Content replaced in Office!",
         replaceError: "Error replacing content",
+        imageInputPlaceholder: "例如：一張高質感產品海報，主角是咖啡杯，暖色系，16:9",
+        imageHostHint: "Office",
     },
     word: {
-        appTitle: "AI Text Rewriter for Word",
-        subtitle: "Rewrite selected Word text with the tone you choose.",
+        appTitle: "AI Assistant for Word",
+        subtitle: "Rewrite selected text, or generate images and insert into Word.",
         inputLabel: "引入文章",
         inputPlaceholder: "Enter text from Word...",
         rewriteButton: "Rewrite & Replace",
@@ -50,32 +53,28 @@ const HOST_CONFIG = {
         skipPasteHelp: "勾選後只顯示結果，不會自動取代 Word 內選取文字。",
         emptyState: "Please enter instructions or select text in Word.",
         selectionLoading: "Reading selection...",
-        selectionMissing: "Please enter instructions or select text in Word.",
-        generating: "Generating from instruction...",
-        inserting: "Inserting into Word...",
-        inserted: "Inserted into Word.",
         replacing: "Replacing selection in Word...",
         replaced: "Text replaced in Word!",
         replaceError: "Error replacing text",
+        imageInputPlaceholder: "例如：一隻戴太空頭盔的柴犬，在月球上喝珍珠奶茶，電影感，16:9",
+        imageHostHint: "Word",
     },
     powerpoint: {
-        appTitle: "AI Text Rewriter for PowerPoint",
-        subtitle: "Rewrite selected slide text and send the polished copy back into PowerPoint.",
+        appTitle: "AI Assistant for PowerPoint",
+        subtitle: "Rewrite selected slide text, or generate images and insert into PowerPoint.",
         inputLabel: "引入投影片文字",
         inputPlaceholder: "Enter text from PowerPoint...",
         rewriteButton: "Rewrite & Insert",
         resultTitle: "Rewritten Slide Text",
         insertButton: "插入投影片",
-        skipPasteHelp: "勾選後只顯示結果，不會自動覆蓋目前投影片選取的文字方塊內容。",
+        skipPasteHelp: "勾選後只顯示結果，不會自動覆蓋目前投影片選取的文字。",
         emptyState: "Please enter instructions or select text in PowerPoint.",
         selectionLoading: "Reading selected slide text...",
-        selectionMissing: "Please enter instructions or select text in PowerPoint.",
-        generating: "Generating slide text...",
-        inserting: "Inserting into PowerPoint...",
-        inserted: "Inserted into PowerPoint.",
         replacing: "Replacing selected slide text...",
         replaced: "Text replaced in PowerPoint!",
         replaceError: "Error replacing slide text",
+        imageInputPlaceholder: "例如：科技感簡報封面背景，藍綠漸層，幾何線條，16:9",
+        imageHostHint: "PowerPoint",
     },
 };
 
@@ -112,34 +111,282 @@ function setStatus(message) {
 }
 
 function setElementText(id, value) {
-    const element = document.getElementById(id);
-    if (element) {
-        element.textContent = value;
+    const node = document.getElementById(id);
+    if (node) {
+        node.textContent = value;
     }
 }
 
-function setHostSpecificText() {
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getGenerationMode() {
+    const modeSelect = document.getElementById("generationMode");
+    if (!modeSelect) {
+        return MODE_TEXT;
+    }
+    return modeSelect.value === MODE_IMAGE ? MODE_IMAGE : MODE_TEXT;
+}
+
+function canUseLocalStorage() {
+    try {
+        if (typeof window === "undefined" || !window.localStorage) {
+            return false;
+        }
+        const testKey = "__officexadd_storage_test__";
+        window.localStorage.setItem(testKey, "1");
+        window.localStorage.removeItem(testKey);
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+function getUiPreferencesStorageKey() {
+    return `${UI_PREFERENCES_KEY_PREFIX}_${currentHost || "office"}`;
+}
+
+function loadUiPreferences() {
+    const defaults = {
+        generationMode: MODE_TEXT,
+        provider: "openai",
+        model: "",
+        webSearchEnabled: false,
+        skipPasteEnabled: false,
+        contextMode: CONTEXT_MODE_CHARS,
+        contextSize: "1",
+        imageModel: "gemini-3.1-flash-image-preview",
+        imageAspectRatio: "1:1",
+        imageSize: "",
+    };
+
+    if (!canUseLocalStorage()) {
+        return defaults;
+    }
+
+    try {
+        const raw = window.localStorage.getItem(getUiPreferencesStorageKey());
+        if (!raw) {
+            return defaults;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+            return defaults;
+        }
+        return {
+            ...defaults,
+            ...parsed,
+        };
+    } catch (error) {
+        console.warn("Failed to read UI preferences", error);
+        return defaults;
+    }
+}
+
+function setSelectValueIfExists(selectNode, value) {
+    if (!selectNode || typeof value !== "string") {
+        return;
+    }
+    const hasValue = Array.from(selectNode.options || []).some((option) => option.value === value);
+    if (hasValue) {
+        selectNode.value = value;
+    }
+}
+
+function applyUiPreferences(preferences) {
+    if (!preferences || typeof preferences !== "object") {
+        return;
+    }
+
+    const generationMode = document.getElementById("generationMode");
+    setSelectValueIfExists(generationMode, preferences.generationMode);
+
+    const providerSelect = document.getElementById("providerSelect");
+    setSelectValueIfExists(providerSelect, preferences.provider);
+
+    const modelInput = document.getElementById("modelInput");
+    if (modelInput && typeof preferences.model === "string") {
+        modelInput.value = preferences.model;
+    }
+
+    const webSearchToggle = document.getElementById("webSearchToggle");
+    if (webSearchToggle && typeof preferences.webSearchEnabled === "boolean") {
+        webSearchToggle.checked = preferences.webSearchEnabled;
+    }
+
+    const skipPasteToggle = document.getElementById("skipPasteToggle");
+    if (skipPasteToggle && typeof preferences.skipPasteEnabled === "boolean") {
+        skipPasteToggle.checked = preferences.skipPasteEnabled;
+    }
+
+    const contextMode = document.getElementById("contextMode");
+    setSelectValueIfExists(contextMode, preferences.contextMode);
+
+    const contextSize = document.getElementById("contextSize");
+    if (contextSize && preferences.contextSize !== undefined && preferences.contextSize !== null) {
+        const value = String(preferences.contextSize).trim();
+        if (value) {
+            contextSize.value = value;
+        }
+    }
+
+    const imageModelInput = document.getElementById("imageModelInput");
+    if (imageModelInput && typeof preferences.imageModel === "string") {
+        imageModelInput.value = preferences.imageModel;
+    }
+
+    const imageAspectRatio = document.getElementById("imageAspectRatio");
+    setSelectValueIfExists(imageAspectRatio, preferences.imageAspectRatio);
+
+    const imageSize = document.getElementById("imageSize");
+    setSelectValueIfExists(imageSize, preferences.imageSize);
+}
+
+function collectUiPreferences() {
+    const generationMode = document.getElementById("generationMode");
+    const providerSelect = document.getElementById("providerSelect");
+    const modelInput = document.getElementById("modelInput");
+    const webSearchToggle = document.getElementById("webSearchToggle");
+    const skipPasteToggle = document.getElementById("skipPasteToggle");
+    const contextMode = document.getElementById("contextMode");
+    const contextSize = document.getElementById("contextSize");
+    const imageModelInput = document.getElementById("imageModelInput");
+    const imageAspectRatio = document.getElementById("imageAspectRatio");
+    const imageSize = document.getElementById("imageSize");
+
+    return {
+        generationMode: generationMode ? generationMode.value : MODE_TEXT,
+        provider: providerSelect ? providerSelect.value : "openai",
+        model: modelInput ? modelInput.value.trim() : "",
+        webSearchEnabled: webSearchToggle ? Boolean(webSearchToggle.checked) : false,
+        skipPasteEnabled: skipPasteToggle ? Boolean(skipPasteToggle.checked) : false,
+        contextMode: contextMode ? contextMode.value : CONTEXT_MODE_NONE,
+        contextSize: contextSize ? String(contextSize.value || "").trim() : "1",
+        imageModel: imageModelInput ? imageModelInput.value.trim() : "",
+        imageAspectRatio: imageAspectRatio ? imageAspectRatio.value : "1:1",
+        imageSize: imageSize ? imageSize.value : "",
+    };
+}
+
+function persistUiPreferences() {
+    if (!canUseLocalStorage()) {
+        return;
+    }
+    try {
+        const preferences = collectUiPreferences();
+        window.localStorage.setItem(getUiPreferencesStorageKey(), JSON.stringify(preferences));
+    } catch (error) {
+        console.warn("Failed to save UI preferences", error);
+    }
+}
+
+function setPrimaryButtonText() {
+    const button = document.getElementById("rewriteBtn");
+    if (!button || isProcessing) {
+        return;
+    }
     const hostConfig = getHostConfig();
+    button.textContent = getGenerationMode() === MODE_IMAGE ? "Generate Image & Insert" : hostConfig.rewriteButton;
+}
+
+function updateModeUI() {
+    const hostConfig = getHostConfig();
+    const mode = getGenerationMode();
+    const isImageMode = mode === MODE_IMAGE;
+    const canUseContext = !isImageMode && supportsDocumentContext();
+
     setElementText("appTitle", hostConfig.appTitle);
     setElementText("appSubtitle", hostConfig.subtitle);
-    setElementText("inputLabel", hostConfig.inputLabel);
-    setElementText("resultTitle", hostConfig.resultTitle);
-    setElementText("skipPasteHelp", hostConfig.skipPasteHelp);
 
+    const imageCard = document.getElementById("imageCard");
+    if (imageCard) {
+        imageCard.classList.toggle("context-hidden", !isImageMode);
+    }
+    const providerCard = document.getElementById("providerCard");
+    if (providerCard) {
+        providerCard.classList.toggle("context-hidden", isImageMode);
+    }
+    const modelCard = document.getElementById("modelCard");
+    if (modelCard) {
+        modelCard.classList.toggle("context-hidden", isImageMode);
+    }
+    const webSearchCard = document.getElementById("webSearchCard");
+    if (webSearchCard) {
+        webSearchCard.classList.remove("context-hidden");
+    }
+    const webSearchRow = document.getElementById("webSearchRow");
+    if (webSearchRow) {
+        webSearchRow.classList.toggle("context-hidden", isImageMode);
+    }
+    const webSearchHelp = document.getElementById("webSearchHelp");
+    if (webSearchHelp) {
+        webSearchHelp.classList.toggle("context-hidden", isImageMode);
+    }
+    const contextCard = document.getElementById("contextCard");
+    const contextMode = document.getElementById("contextMode");
+    const contextSizeRow = document.getElementById("contextSizeRow");
+    const contextHelp = document.getElementById("contextHelp");
+    if (contextCard) {
+        contextCard.classList.toggle("context-hidden", !canUseContext);
+    }
+    if (!supportsDocumentContext()) {
+        if (contextMode) {
+            contextMode.value = CONTEXT_MODE_NONE;
+        }
+        if (contextSizeRow) {
+            contextSizeRow.classList.add("context-hidden");
+        }
+        if (contextHelp) {
+            contextHelp.textContent = "PowerPoint 目前只會讀取選取文字，不會抓整份文件/投影片上下文。";
+        }
+    }
+
+    const title = document.getElementById("resultTitle");
+    if (title) {
+        title.textContent = isImageMode ? "Generated Image" : hostConfig.resultTitle;
+    }
+
+    const inputLabel = document.getElementById("inputLabel");
+    if (inputLabel) {
+        inputLabel.textContent = isImageMode ? "生圖需求" : hostConfig.inputLabel;
+    }
+    const instructionLabel = document.getElementById("instructionLabel");
+    if (instructionLabel) {
+        instructionLabel.textContent = isImageMode ? "附加指令 (可選)" : "Instructions:";
+    }
     const inputText = document.getElementById("inputText");
     if (inputText) {
-        inputText.placeholder = hostConfig.inputPlaceholder;
+        inputText.placeholder = isImageMode
+            ? hostConfig.imageInputPlaceholder
+            : hostConfig.inputPlaceholder;
     }
-
-    const rewriteBtn = document.getElementById("rewriteBtn");
-    if (rewriteBtn && !isProcessing) {
-        rewriteBtn.textContent = hostConfig.rewriteButton;
+    const instructionText = document.getElementById("instructionText");
+    if (instructionText) {
+        instructionText.placeholder = isImageMode
+            ? "例如：偏寫實、保留暖色光影、細節清晰"
+            : "e.g., Make it more formal";
     }
-
     const insertBtn = document.getElementById("insertBtn");
     if (insertBtn) {
-        insertBtn.textContent = hostConfig.insertButton;
+        insertBtn.textContent = isImageMode ? "插入圖片" : hostConfig.insertButton;
     }
+    const skipPasteHelp = document.getElementById("skipPasteHelp");
+    if (skipPasteHelp) {
+        skipPasteHelp.textContent = isImageMode
+            ? `勾選後只顯示圖片，不會自動插入 ${hostConfig.imageHostHint}。`
+            : hostConfig.skipPasteHelp;
+    }
+    if (canUseContext) {
+        updateContextControls();
+    }
+
+    setPrimaryButtonText();
 }
 
 function setResultContent(content, options = {}) {
@@ -147,6 +394,8 @@ function setResultContent(content, options = {}) {
     const resultContent = document.getElementById("resultContent");
     const copyBtn = document.getElementById("copyBtn");
     const insertBtn = document.getElementById("insertBtn");
+    latestImageResult = null;
+    latestTextResult = null;
     if (!resultContent) {
         return;
     }
@@ -175,16 +424,40 @@ function setResultContent(content, options = {}) {
     }
 }
 
-function htmlToPlainText(html) {
-    const container = document.createElement("div");
-    container.innerHTML = html;
-    return container.textContent.trim();
+function setImageResult(imageBase64, mimeType, prompt, modelName) {
+    const resultContent = document.getElementById("resultContent");
+    const copyBtn = document.getElementById("copyBtn");
+    const insertBtn = document.getElementById("insertBtn");
+    if (!resultContent) {
+        return;
+    }
+    const safePrompt = escapeHtml(prompt || "");
+    const safeModel = escapeHtml(modelName || "");
+    const mediaType = mimeType || "image/png";
+    const dataUrl = `data:${mediaType};base64,${imageBase64}`;
+    resultContent.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+            <img src="${dataUrl}" alt="Generated image" style="width:100%; border-radius:10px; border:1px solid #e1d6c7;" />
+            ${safeModel ? `<small>Model: ${safeModel}</small>` : ""}
+            ${safePrompt ? `<small>Prompt: ${safePrompt}</small>` : ""}
+        </div>
+    `;
+    latestImageResult = {
+        imageBase64,
+        mimeType: mediaType,
+    };
+    latestTextResult = null;
+    if (copyBtn) {
+        copyBtn.disabled = true;
+    }
+    if (insertBtn) {
+        insertBtn.disabled = false;
+    }
 }
 
 function setProcessingState(active) {
     isProcessing = active;
     const button = document.getElementById("rewriteBtn");
-    const hostConfig = getHostConfig();
     if (!button) {
         return;
     }
@@ -192,7 +465,7 @@ function setProcessingState(active) {
         button.textContent = "Stop";
         button.classList.add("is-stop");
     } else {
-        button.textContent = hostConfig.rewriteButton;
+        setPrimaryButtonText();
         button.classList.remove("is-stop");
         currentController = null;
     }
@@ -239,7 +512,7 @@ function updateContextControls() {
         contextCard.classList.add("context-hidden");
         modeSelect.value = CONTEXT_MODE_NONE;
         sizeRow.classList.add("context-hidden");
-        help.textContent = "PowerPoint 目前只會讀取選取的文字，不會抓整份投影片上下文。";
+        help.textContent = "PowerPoint 目前只會讀取選取文字，不會抓整份文件/投影片上下文。";
         return;
     }
     contextCard.classList.remove("context-hidden");
@@ -536,9 +809,9 @@ function buildContextFromSnapshot(snapshot, mode, size) {
     return { contextText: "", note: contextNote };
 }
 
-function formatRequestError(error, didTimeout, provider) {
+function formatRequestError(error, didTimeout, timeoutMessage, provider) {
     if (didTimeout) {
-        return "Request timed out. Try again or disable web search.";
+        return timeoutMessage || "Request timed out. Try again or disable web search.";
     }
     if (error && error.name === "AbortError") {
         return "Request canceled.";
@@ -550,11 +823,20 @@ function formatRequestError(error, didTimeout, provider) {
     const lowered = message.toLowerCase();
     if (lowered.includes("unauthorized") || lowered.includes("api error: 401")) {
         if (provider === "ollama") {
-            return "Authorization failed for Ollama. Check AI_BASE_URL / AI_API_KEY on the server, or switch the provider to OpenAI.";
+            return "Authorization failed for Ollama. Check AI_BASE_URL / AI_API_KEY, or switch provider to OpenAI.";
         }
-        return "Authorization failed for the selected provider. Check the server-side API credentials and try again.";
+        if (provider === "google") {
+            return "Authorization failed for Google image API. Check GOOGLE_API_KEY in backend .env.";
+        }
+        return "Authorization failed for the selected provider. Check server-side API credentials.";
     }
     return `Error: ${message}`;
+}
+
+function htmlToPlainText(html) {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    return (container.textContent || "").trim();
 }
 
 async function copyResult() {
@@ -594,26 +876,50 @@ async function copyResult() {
     }
 }
 
-function replaceSelectedContent(content, callbacks = {}) {
-    const { onSuccess, onError } = callbacks;
-    const payload = isWordHost() ? content.html : content.text;
-    const coercionType = isWordHost() ? Office.CoercionType.Html : Office.CoercionType.Text;
-    Office.context.document.setSelectedDataAsync(payload, { coercionType }, (asyncResult) => {
-        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-            if (onError) {
-                onError(asyncResult.error);
-            }
+function setSelectedDataAsyncPromise(data, options) {
+    return new Promise((resolve, reject) => {
+        if (!Office || !Office.context || !Office.context.document) {
+            reject(new Error("Office context is not available."));
             return;
         }
-        if (onSuccess) {
-            onSuccess();
-        }
+        Office.context.document.setSelectedDataAsync(data, options, (asyncResult) => {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                reject(new Error(asyncResult.error.message));
+            } else {
+                resolve();
+            }
+        });
     });
 }
 
+async function insertTextIntoOffice(html, plainText) {
+    if (isWordHost()) {
+        await setSelectedDataAsyncPromise(html, { coercionType: Office.CoercionType.Html });
+        return;
+    }
+    const textPayload = plainText && plainText.trim() ? plainText : htmlToPlainText(html);
+    await setSelectedDataAsyncPromise(textPayload, { coercionType: Office.CoercionType.Text });
+}
+
+async function insertImageIntoOffice(imageBase64) {
+    if (isWordHost() && typeof Word !== "undefined") {
+        try {
+            await Word.run(async (context) => {
+                const range = context.document.getSelection();
+                range.insertInlinePictureFromBase64(imageBase64, Word.InsertLocation.replace);
+                await context.sync();
+            });
+            return;
+        } catch (error) {
+            console.warn("Word image insertion fallback triggered", error);
+        }
+    }
+    await setSelectedDataAsyncPromise(imageBase64, { coercionType: Office.CoercionType.Image });
+}
+
 function getResultPayload() {
-    if (lastRewriteResult && lastRewriteResult.text) {
-        return lastRewriteResult;
+    if (latestTextResult && latestTextResult.html) {
+        return latestTextResult;
     }
     const resultContent = document.getElementById("resultContent");
     if (!resultContent) {
@@ -627,17 +933,29 @@ function getResultPayload() {
     return { html, text };
 }
 
-function insertResultIntoDocument() {
+async function insertResultIntoDocument() {
     const hostConfig = getHostConfig();
-    const payload = getResultPayload();
-    if (!payload) {
-        return;
+    try {
+        if (latestImageResult && latestImageResult.imageBase64) {
+            setStatus(`Inserting image into ${hostConfig.imageHostHint}...`);
+            await insertImageIntoOffice(latestImageResult.imageBase64);
+            setStatus(`Image inserted into ${hostConfig.imageHostHint}.`);
+            return true;
+        }
+
+        const payload = getResultPayload();
+        if (!payload) {
+            return false;
+        }
+
+        setStatus(hostConfig.replacing);
+        await insertTextIntoOffice(payload.html, payload.text);
+        setStatus(hostConfig.replaced);
+        return true;
+    } catch (error) {
+        setStatus(`Insert failed: ${error.message}`);
+        return false;
     }
-    setStatus(hostConfig.inserting);
-    replaceSelectedContent(payload, {
-        onSuccess: () => setStatus(hostConfig.inserted),
-        onError: (error) => setStatus(`Insert failed: ${error.message}`),
-    });
 }
 
 Office.onReady((info) => {
@@ -645,11 +963,11 @@ Office.onReady((info) => {
         currentHost = "word";
     } else if (info.host === Office.HostType.PowerPoint) {
         currentHost = "powerpoint";
+    } else {
+        currentHost = "office";
     }
-    setHostSpecificText();
 
     if (info.host === Office.HostType.Word || info.host === Office.HostType.PowerPoint) {
-        // 使用 cleanupResources 而不是 cancelCurrentRequest 確保完全清理
         window.addEventListener("unload", cleanupResources);
         window.addEventListener("beforeunload", cleanupResources);
         document.getElementById("rewriteBtn").onclick = rewriteText;
@@ -664,17 +982,66 @@ Office.onReady((info) => {
 
         const contextMode = document.getElementById("contextMode");
         if (contextMode) {
-            contextMode.addEventListener("change", updateContextControls);
+            contextMode.addEventListener("change", () => {
+                updateContextControls();
+                persistUiPreferences();
+            });
         }
-        updateContextControls();
-
         const providerSelect = document.getElementById("providerSelect");
         if (providerSelect) {
-            providerSelect.addEventListener("change", () => refreshModelOptions(providerSelect.value));
-            refreshModelOptions(providerSelect.value);
+            providerSelect.addEventListener("change", () => {
+                refreshModelOptions(providerSelect.value);
+                persistUiPreferences();
+            });
         }
+
+        const generationMode = document.getElementById("generationMode");
+        if (generationMode) {
+            generationMode.addEventListener("change", () => {
+                updateModeUI();
+                persistUiPreferences();
+            });
+        }
+
+        applyUiPreferences(loadUiPreferences());
+        refreshModelOptions(providerSelect ? providerSelect.value : "openai");
+        updateModeUI();
+
+        const fieldsToPersist = [
+            "webSearchToggle",
+            "skipPasteToggle",
+            "modelInput",
+            "contextSize",
+            "imageModelInput",
+            "imageAspectRatio",
+            "imageSize",
+        ];
+        fieldsToPersist.forEach((id) => {
+            const node = document.getElementById(id);
+            if (!node) {
+                return;
+            }
+            const eventName = node.tagName === "INPUT" && node.type !== "checkbox" ? "input" : "change";
+            node.addEventListener(eventName, persistUiPreferences);
+            if (eventName !== "change") {
+                node.addEventListener("change", persistUiPreferences);
+            }
+        });
     }
 });
+
+function buildImagePrompt(inputText, instructionText, selectionText) {
+    const chunks = [];
+    if (inputText && inputText.trim()) {
+        chunks.push(inputText.trim());
+    } else if (selectionText && selectionText.trim()) {
+        chunks.push(selectionText.trim());
+    }
+    if (instructionText && instructionText.trim()) {
+        chunks.push(instructionText.trim());
+    }
+    return chunks.join("\n\n");
+}
 
 async function rewriteText() {
     if (isProcessing) {
@@ -683,41 +1050,167 @@ async function rewriteText() {
     }
 
     const hostConfig = getHostConfig();
+    const generationMode = getGenerationMode();
+    const isImageMode = generationMode === MODE_IMAGE;
     const inputTextElement = document.getElementById("inputText");
     const inputText = inputTextElement ? inputTextElement.value : "";
-    const instructionText = document.getElementById("instructionText").value;
-    const providerChoice = document.getElementById("providerSelect").value;
-    const modelChoice = document.getElementById("modelInput").value.trim();
-    const useWebSearch = document.getElementById("webSearchToggle").checked;
-    const skipPaste = document.getElementById("skipPasteToggle").checked;
-    const requestedContextMode = document.getElementById("contextMode").value;
+    const instructionNode = document.getElementById("instructionText");
+    const instructionText = instructionNode ? instructionNode.value : "";
+    const providerNode = document.getElementById("providerSelect");
+    const providerChoice = providerNode ? providerNode.value : "openai";
+    const modelNode = document.getElementById("modelInput");
+    const modelChoice = modelNode ? modelNode.value.trim() : "";
+    const webSearchNode = document.getElementById("webSearchToggle");
+    const useWebSearch = webSearchNode ? webSearchNode.checked : false;
+    const skipPasteNode = document.getElementById("skipPasteToggle");
+    const skipPaste = skipPasteNode ? skipPasteNode.checked : false;
+    const contextModeNode = document.getElementById("contextMode");
+    const requestedContextMode = contextModeNode ? contextModeNode.value : CONTEXT_MODE_NONE;
     const contextMode = supportsDocumentContext() ? requestedContextMode : CONTEXT_MODE_NONE;
     const contextSize = parseContextSize();
     const requestId = activeRequestId + 1;
     activeRequestId = requestId;
     currentController = new AbortController();
 
-    // If no manual input, we'll try to get selection, but we need to handle the case where both are empty later
-
-    lastRewriteResult = null;
     setResultContent("Processing...", { isHtml: false, allowActions: false });
     setProcessingState(true);
     setStatus("Preparing request...");
 
     try {
         setStatus(hostConfig.selectionLoading);
-        const needsDocument = contextMode !== CONTEXT_MODE_NONE;
+        const needsDocument = !isImageMode && contextMode !== CONTEXT_MODE_NONE;
         const snapshot = await getDocumentSnapshot({ includeDocumentText: needsDocument });
+        const selectedText = snapshot.selectionText || "";
+
+        if (isImageMode) {
+            const imagePrompt = buildImagePrompt(inputText, instructionText, selectedText);
+            const imageModelNode = document.getElementById("imageModelInput");
+            const imageAspectNode = document.getElementById("imageAspectRatio");
+            const imageSizeNode = document.getElementById("imageSize");
+            const imageModel = imageModelNode ? imageModelNode.value.trim() : "";
+            const imageAspect = imageAspectNode ? imageAspectNode.value : "";
+            const imageSize = imageSizeNode ? imageSizeNode.value : "";
+
+            if (!imagePrompt.trim()) {
+                setResultContent(`請輸入生圖需求，或先在 ${hostConfig.imageHostHint} 選取一段文字。`, { isHtml: false, allowActions: false });
+                setProcessingState(false);
+                setStatus("Idle");
+                return;
+            }
+
+            let didTimeout = false;
+            try {
+                setStatus("Calling Google image model...");
+                const payload = {
+                    prompt: imagePrompt,
+                };
+                if (imageModel) {
+                    payload.model = imageModel;
+                }
+                if (imageAspect) {
+                    payload.aspect_ratio = imageAspect;
+                }
+                if (imageSize) {
+                    payload.image_size = imageSize;
+                }
+
+                const timeoutId = setTimeout(() => {
+                    didTimeout = true;
+                    if (currentController) {
+                        currentController.abort();
+                    }
+                    activeTimeouts.delete(timeoutId);
+                }, IMAGE_TIMEOUT_MS);
+                activeTimeouts.add(timeoutId);
+
+                let response;
+                try {
+                    response = await fetch(`${OFFICEXADD_API_BASE_URL}/api/generate-image`, {
+                        method: "POST",
+                        headers: buildApiHeaders(),
+                        body: JSON.stringify(payload),
+                        signal: currentController.signal,
+                    });
+                } finally {
+                    clearTimeout(timeoutId);
+                    activeTimeouts.delete(timeoutId);
+                }
+
+                let data;
+                if (!response.ok) {
+                    try {
+                        data = await response.json();
+                    } catch (parseError) {
+                        data = {};
+                    }
+                    const errorDetail = data && data.error ? data.error : "";
+                    const errorMessage = errorDetail
+                        ? `API error: ${response.status} - ${errorDetail}`
+                        : `API error: ${response.status}`;
+                    throw new Error(errorMessage);
+                } else {
+                    data = await response.json();
+                }
+
+                if (requestId !== activeRequestId || !isProcessing) {
+                    return;
+                }
+
+                const imageBase64 = data.image_base64 || "";
+                if (!imageBase64) {
+                    throw new Error("API returned empty image data.");
+                }
+                const mimeType = data.mime_type || "image/png";
+                setImageResult(imageBase64, mimeType, imagePrompt, data.model || imageModel);
+
+                if (skipPaste) {
+                    setStatus("Done.");
+                    setProcessingState(false);
+                    return;
+                }
+
+                const inserted = await insertResultIntoDocument();
+                if (inserted && inputTextElement) {
+                    inputTextElement.value = "";
+                }
+                setStatus(inserted ? "Done." : "Insert failed.");
+                setProcessingState(false);
+                return;
+            } catch (apiError) {
+                if (requestId !== activeRequestId || !isProcessing) {
+                    return;
+                }
+                const message = formatRequestError(
+                    apiError,
+                    didTimeout,
+                    "Image generation timed out. Try a shorter prompt.",
+                    "google"
+                );
+                setResultContent(message, { isHtml: false, allowActions: false });
+                if (message.startsWith("Image generation timed out")) {
+                    setStatus("Image generation timed out.");
+                } else if (message.startsWith("Request canceled")) {
+                    setStatus("Canceled by user.");
+                } else if (message.startsWith("Network error")) {
+                    setStatus("Network error.");
+                } else {
+                    setStatus("Error during image generation.");
+                }
+                setProcessingState(false);
+                return;
+            }
+        }
+
         let textToRewrite = inputText;
-        if (snapshot.selectionText && snapshot.selectionText.trim()) {
-            textToRewrite = snapshot.selectionText;
+        if (selectedText.trim()) {
+            textToRewrite = selectedText;
             if (inputTextElement) {
                 inputTextElement.value = textToRewrite;
             }
         }
 
         if (!textToRewrite.trim() && !instructionText.trim()) {
-            setResultContent(hostConfig.selectionMissing, { isHtml: false, allowActions: false });
+            setResultContent(hostConfig.emptyState, { isHtml: false, allowActions: false });
             setProcessingState(false);
             setStatus("Idle");
             return;
@@ -737,10 +1230,9 @@ async function rewriteText() {
         }
 
         if (!textToRewrite.trim()) {
-            setStatus(hostConfig.generating);
+            setStatus("Generating from instruction...");
         }
 
-        // Call backend API
         let didTimeout = false;
         try {
             setStatus(useWebSearch ? "Using web search tool..." : "Calling AI model...");
@@ -807,48 +1299,31 @@ async function rewriteText() {
             if (requestId !== activeRequestId || !isProcessing) {
                 return;
             }
+            if (!newText || !newText.trim()) {
+                throw new Error("API returned empty rewritten text.");
+            }
 
-            // Display result
-            lastRewriteResult = { html: newText, text: htmlToPlainText(newText) };
+            const plainText = htmlToPlainText(newText);
             setResultContent(newText, { isHtml: true, allowActions: true });
+            latestTextResult = { html: newText, text: plainText };
 
-            // Replace selection in the current Office host
             if (skipPaste) {
                 setStatus("Done.");
                 setProcessingState(false);
                 return;
             }
-            setStatus(hostConfig.replacing);
-            replaceSelectedContent({ html: newText, text: htmlToPlainText(newText) }, {
-                onSuccess: () => {
-                    if (requestId !== activeRequestId) {
-                        setProcessingState(false);
-                        return;
-                    }
-                    setResultContent(`${newText}<br><span style="color:green">${hostConfig.replaced}</span>`, { isHtml: true, allowActions: true });
-                    if (inputTextElement) {
-                        inputTextElement.value = "";
-                    }
-                    setStatus("Done.");
-                    setProcessingState(false);
-                },
-                onError: (error) => {
-                    if (requestId !== activeRequestId) {
-                        setProcessingState(false);
-                        return;
-                    }
-                    setResultContent(`${newText}<br><span style="color:red">${hostConfig.replaceError}: ${error.message}</span>`, { isHtml: true, allowActions: true });
-                    setStatus(hostConfig.replaceError);
-                    setProcessingState(false);
-                },
-            });
 
+            const inserted = await insertResultIntoDocument();
+            if (inserted && inputTextElement) {
+                inputTextElement.value = "";
+            }
+            setStatus(inserted ? "Done." : "Insert failed.");
+            setProcessingState(false);
         } catch (apiError) {
             if (requestId !== activeRequestId || !isProcessing) {
                 return;
             }
-            const message = formatRequestError(apiError, didTimeout, providerChoice);
-            lastRewriteResult = null;
+            const message = formatRequestError(apiError, didTimeout, undefined, providerChoice);
             setResultContent(message, { isHtml: false, allowActions: false });
             if (message.startsWith("Request timed out")) {
                 setStatus("Request timed out.");
@@ -862,7 +1337,6 @@ async function rewriteText() {
             setProcessingState(false);
         }
     } catch (error) {
-        lastRewriteResult = null;
         setResultContent(`Error: ${error.message}`, { isHtml: false, allowActions: false });
         setStatus("Unexpected error.");
         setProcessingState(false);

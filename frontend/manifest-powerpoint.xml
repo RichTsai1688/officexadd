@@ -13,14 +13,14 @@
   <DefaultLocale>en-US</DefaultLocale>
 
   <DisplayName DefaultValue="OfficeXAdd for PowerPoint" />
-  <Description DefaultValue="AI-powered slide text rewriting assistant for PowerPoint" />
+  <Description DefaultValue="AI-powered text rewriting and image assistant for PowerPoint" />
 
-  <IconUrl DefaultValue="https://fcu.labelnine.app:2053/assets/icon-32.png" />
-  <HighResolutionIconUrl DefaultValue="https://fcu.labelnine.app:2053/assets/icon-80.png" />
+  <IconUrl DefaultValue="https://office-addin.labelnine.app/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://office-addin.labelnine.app/assets/icon-80.png" />
   <SupportUrl DefaultValue="http://www.example.com/support" />
 
   <AppDomains>
-    <AppDomain>https://fcu.labelnine.app:2053</AppDomain>
+    <AppDomain>https://office-addin.labelnine.app</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -28,7 +28,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://fcu.labelnine.app:2053/taskpane.html" />
+    <SourceLocation DefaultValue="https://office-addin.labelnine.app/taskpane.html" />
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -95,15 +95,15 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://fcu.labelnine.app:2053/assets/icon-16.png" />
-        <bt:Image id="Icon.32x32" DefaultValue="https://fcu.labelnine.app:2053/assets/icon-32.png" />
-        <bt:Image id="Icon.80x80" DefaultValue="https://fcu.labelnine.app:2053/assets/icon-80.png" />
+        <bt:Image id="Icon.16x16" DefaultValue="https://office-addin.labelnine.app/assets/icon-16.png" />
+        <bt:Image id="Icon.32x32" DefaultValue="https://office-addin.labelnine.app/assets/icon-32.png" />
+        <bt:Image id="Icon.80x80" DefaultValue="https://office-addin.labelnine.app/assets/icon-80.png" />
       </bt:Images>
 
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812" />
-        <bt:Url id="Commands.Url" DefaultValue="https://fcu.labelnine.app:2053/commands.html" />
-        <bt:Url id="Taskpane.Url" DefaultValue="https://fcu.labelnine.app:2053/taskpane.html" />
+        <bt:Url id="Commands.Url" DefaultValue="https://office-addin.labelnine.app/commands.html" />
+        <bt:Url id="Taskpane.Url" DefaultValue="https://office-addin.labelnine.app/taskpane.html" />
       </bt:Urls>
 
       <bt:ShortStrings>
@@ -113,8 +113,8 @@
       </bt:ShortStrings>
 
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Your AI-powered PowerPoint rewriting assistant is ready!" />
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the AI rewriting assistant for slide text" />
+        <bt:String id="GetStarted.Description" DefaultValue="Your AI-powered assistant for PowerPoint is ready!" />
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the AI assistant for slide content" />
       </bt:LongStrings>
     </Resources>
 

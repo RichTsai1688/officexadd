@@ -15,12 +15,12 @@
   <DisplayName DefaultValue="OfficeXAdd" />
   <Description DefaultValue="AI-powered text rewriting assistant for Office" />
 
-  <IconUrl DefaultValue="https://office-addin.labelnine.app/assets/icon-32.png" />
-  <HighResolutionIconUrl DefaultValue="https://office-addin.labelnine.app/assets/icon-80.png" />
+  <IconUrl DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/assets/icon-80.png" />
   <SupportUrl DefaultValue="http://www.example.com/support" />
 
   <AppDomains>
-    <AppDomain>https://office-addin.labelnine.app</AppDomain>
+    <AppDomain>__OFFICEXADD_PUBLIC_ORIGIN__</AppDomain>
   </AppDomains>
 
   <Hosts>
@@ -28,7 +28,7 @@
   </Hosts>
 
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://office-addin.labelnine.app/taskpane.html" />
+    <SourceLocation DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/taskpane.html" />
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
@@ -95,15 +95,15 @@
 
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://office-addin.labelnine.app/assets/icon-16.png" />
-        <bt:Image id="Icon.32x32" DefaultValue="https://office-addin.labelnine.app/assets/icon-32.png" />
-        <bt:Image id="Icon.80x80" DefaultValue="https://office-addin.labelnine.app/assets/icon-80.png" />
+        <bt:Image id="Icon.16x16" DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/assets/icon-16.png" />
+        <bt:Image id="Icon.32x32" DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/assets/icon-32.png" />
+        <bt:Image id="Icon.80x80" DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/assets/icon-80.png" />
       </bt:Images>
 
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812" />
-        <bt:Url id="Commands.Url" DefaultValue="https://office-addin.labelnine.app/commands.html" />
-        <bt:Url id="Taskpane.Url" DefaultValue="https://office-addin.labelnine.app/taskpane.html" />
+        <bt:Url id="Commands.Url" DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/commands.html" />
+        <bt:Url id="Taskpane.Url" DefaultValue="__OFFICEXADD_PUBLIC_ORIGIN__/taskpane.html" />
       </bt:Urls>
 
       <bt:ShortStrings>

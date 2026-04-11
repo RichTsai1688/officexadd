@@ -271,14 +271,23 @@
 
 <body>
     <div class="page">
-        <div class="version-badge">v0.1.1</div>
+        <div class="version-badge">v0.1.2</div>
         <h1 id="appTitle">AI Text Rewriter</h1>
-        <p id="appSubtitle" class="subtitle">Rewrite selected text with the tone you choose.</p>
+        <p id="appSubtitle" class="subtitle">Rewrite selected text, or generate images and insert into Office.</p>
+
+        <div class="card">
+            <label for="generationMode">模式</label>
+            <select id="generationMode">
+                <option value="text" selected>文字改寫</option>
+                <option value="image">Google 生圖 (Nano Banana)</option>
+            </select>
+            <small style="display:block; margin-top: 6px;">生圖模式會呼叫 Google Gemini Nano Banana 生成圖片，並可直接插入文件。</small>
+        </div>
 
         <div class="card">
             <label id="inputLabel" for="inputText" class="is-compact">引入文章</label>
             <textarea id="inputText" placeholder="Enter text to rewrite..."></textarea>
-            <label for="instructionText" class="is-compact">Instructions:</label>
+            <label id="instructionLabel" for="instructionText" class="is-compact">Instructions:</label>
             <textarea id="instructionText" placeholder="e.g., Make it more formal" rows="3"></textarea>
         </div>
 
@@ -300,7 +309,7 @@
             <small id="contextHelp" style="display:block; margin-top: 6px;">會把選取位置前後的內容一起送出，避免重複段落。</small>
         </div>
 
-        <div class="card">
+        <div id="providerCard" class="card">
             <label for="providerSelect">AI Provider:</label>
             <select id="providerSelect">
                 <option value="openai">OpenAI (official API)</option>
@@ -309,7 +318,7 @@
             <small style="display:block; margin-top: 6px;">Ollama requires the backend to be configured with `AI_BASE_URL` and `AI_API_KEY`.</small>
         </div>
 
-        <div class="card">
+        <div id="modelCard" class="card">
             <label for="modelInput">Model (optional)</label>
             <input id="modelInput" list="modelList" placeholder="e.g., gpt-4o-mini or mistral-large-3:675b-cloud" />
             <small style="display:block; margin-top: 6px;">Choose from the list below or type any name. The list refreshes when you change the provider.</small>
@@ -317,12 +326,38 @@
             <div id="modelStatus" style="font-size: 0.85rem; margin-top: 6px;">Loading models...</div>
         </div>
 
-        <div class="card">
-            <label class="toggle-label">
+        <div id="imageCard" class="card context-hidden">
+            <label for="imageModelInput">Google image model</label>
+            <input id="imageModelInput" placeholder="gemini-3.1-flash-image-preview" value="gemini-3.1-flash-image-preview" />
+            <small style="display:block; margin-top: 6px;">預設使用最新 Nano Banana 2 對應模型：`gemini-3.1-flash-image-preview`。</small>
+
+            <label for="imageAspectRatio" style="margin-top: 12px;">Aspect ratio</label>
+            <select id="imageAspectRatio">
+                <option value="1:1" selected>1:1</option>
+                <option value="16:9">16:9</option>
+                <option value="9:16">9:16</option>
+                <option value="3:2">3:2</option>
+                <option value="2:3">2:3</option>
+                <option value="4:3">4:3</option>
+                <option value="3:4">3:4</option>
+            </select>
+
+            <label for="imageSize" style="margin-top: 12px;">Image size (optional)</label>
+            <select id="imageSize">
+                <option value="" selected>Default</option>
+                <option value="0.5K">0.5K</option>
+                <option value="1K">1K</option>
+                <option value="2K">2K</option>
+                <option value="4K">4K</option>
+            </select>
+        </div>
+
+        <div id="webSearchCard" class="card">
+            <label id="webSearchRow" class="toggle-label">
                 <input id="webSearchToggle" type="checkbox" />
                 Use web search
             </label>
-            <small style="display:block; margin-top: 6px;">When enabled, the backend will call the provider's web search tool.</small>
+            <small id="webSearchHelp" style="display:block; margin-top: 6px;">When enabled, the backend will call the provider's web search tool.</small>
             <label class="toggle-label" style="margin-top: 12px;">
                 <input id="skipPasteToggle" type="checkbox" />
                 不要直接貼上

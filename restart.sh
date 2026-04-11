@@ -10,6 +10,7 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
 fi
 
 "$ROOT_DIR/stop.sh"
+"$ROOT_DIR/render_frontend_assets.sh"
 
 mkdir -p "$PID_DIR"
 

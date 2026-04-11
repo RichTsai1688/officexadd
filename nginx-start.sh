@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${OFFICEXADD_PUBLIC_ORIGIN:=https://fcu.labelnine.app:2053}"
+: "${OFFICEXADD_PUBLIC_ORIGIN:?OFFICEXADD_PUBLIC_ORIGIN is required. Set it to the Cloudflare Tunnel hostname for this add-in.}"
 
 if [ -z "${OFFICEXADD_API_TOKEN:-}" ]; then
   echo "ERROR: OFFICEXADD_API_TOKEN is required to start nginx service." >&2
@@ -15,11 +15,15 @@ export OFFICEXADD_PUBLIC_ORIGIN
 TOKEN_ESCAPED=$(printf '%s' "$OFFICEXADD_API_TOKEN" | sed 's/[\\|&]/\\&/g')
 sed "s|__OFFICEXADD_API_TOKEN__|${TOKEN_ESCAPED}|g" /etc/nginx/nginx.conf > /etc/nginx/nginx-rendered.conf
 
-cat <<EOCONFIG > /usr/share/nginx/html/config.js
-window.__OFFICEXADD_CONFIG__ = {
-  apiBaseUrl: "${OFFICEXADD_PUBLIC_ORIGIN}",
-  apiToken: "${OFFICEXADD_API_TOKEN}",
-};
-EOCONFIG
+ORIGIN_ESCAPED=$(printf '%s' "$OFFICEXADD_PUBLIC_ORIGIN" | sed 's/[\\|&]/\\&/g')
+
+sed \
+  -e "s|__OFFICEXADD_PUBLIC_ORIGIN__|${ORIGIN_ESCAPED}|g" \
+  -e "s|__OFFICEXADD_API_TOKEN__|${TOKEN_ESCAPED}|g" \
+  /usr/share/nginx/html/config.template.js > /usr/share/nginx/html/config.js
+
+sed \
+  -e "s|__OFFICEXADD_PUBLIC_ORIGIN__|${ORIGIN_ESCAPED}|g" \
+  /usr/share/nginx/html/manifest.template.xml > /usr/share/nginx/html/manifest.xml
 
 exec nginx -c /etc/nginx/nginx-rendered.conf -g 'daemon off;'

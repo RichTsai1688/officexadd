@@ -5,7 +5,7 @@ import openai
 import os
 from urllib import request as url_request
 from urllib import error as url_error
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env file
@@ -24,6 +24,11 @@ OLLAMA_API_KEY = os.getenv("AI_API_KEY") or LEGACY_API_KEY
 OLLAMA_WEB_SEARCH_API_KEY = os.getenv("OLLAMA_WEB_SEARCH_API_KEY") or os.getenv("ollama_web_search_api_key") or ""
 OLLAMA_WEB_SEARCH_URL = os.getenv("OLLAMA_WEB_SEARCH_URL") or ""
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or LEGACY_API_KEY
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or ""
+GOOGLE_IMAGE_MODEL = os.getenv("GOOGLE_IMAGE_MODEL") or "gemini-3.1-flash-image-preview"
+GOOGLE_IMAGE_ASPECT_RATIO = os.getenv("GOOGLE_IMAGE_ASPECT_RATIO") or "1:1"
+GOOGLE_IMAGE_SIZE = os.getenv("GOOGLE_IMAGE_SIZE") or ""
+GOOGLE_API_BASE_URL = os.getenv("GOOGLE_API_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta"
 MODEL_NAME = os.getenv("MODEL_NAME") or ""
 DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
@@ -37,6 +42,23 @@ def build_client(base_url: str | None = None, api_key: str | None = None):
     if api_key:
         kwargs["api_key"] = api_key
     return OpenAI(**kwargs)
+
+
+def list_model_ids(client):
+    response = client.models.list()
+    raw_models = getattr(response, 'data', []) or []
+    models = []
+    for entry in raw_models:
+        model_id = None
+        if isinstance(entry, str):
+            model_id = entry
+        elif hasattr(entry, 'get'):
+            model_id = entry.get('id')
+        elif hasattr(entry, 'id'):
+            model_id = getattr(entry, 'id')
+        if model_id:
+            models.append(model_id)
+    return models
 
 def extract_response_text(response):
     if isinstance(response, dict):
@@ -235,7 +257,150 @@ def run_with_web_search(client, model_name, messages, provider):
     return run_openai_web_search(client, model_name, messages)
 
 
-def resolve_model_name(provider: str, requested: str | None) -> tuple[str, str | None]:
+def extract_google_error_message(payload):
+    if not isinstance(payload, dict):
+        return ""
+    error_obj = payload.get("error")
+    if isinstance(error_obj, dict):
+        return str(error_obj.get("message") or "").strip()
+    if isinstance(error_obj, str):
+        return error_obj.strip()
+    return ""
+
+
+def extract_google_text_parts(payload):
+    if not isinstance(payload, dict):
+        return []
+    texts = []
+    for candidate in payload.get("candidates", []) or []:
+        content = candidate.get("content") or {}
+        for part in content.get("parts", []) or []:
+            text_value = part.get("text")
+            if text_value:
+                texts.append(text_value)
+    return texts
+
+
+def normalize_base64_payload(image_data):
+    if not isinstance(image_data, str):
+        return ""
+    value = image_data.strip()
+    marker = ";base64,"
+    if value.startswith("data:") and marker in value:
+        return value.split(marker, 1)[1]
+    return value
+
+
+def extract_google_image_part(payload):
+    if not isinstance(payload, dict):
+        return None
+
+    for candidate in payload.get("candidates", []) or []:
+        content = candidate.get("content") or {}
+        for part in content.get("parts", []) or []:
+            inline = part.get("inlineData") or part.get("inline_data") or {}
+            image_data = normalize_base64_payload(inline.get("data") or "")
+            mime_type = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+            if image_data:
+                return {
+                    "image_base64": image_data,
+                    "mime_type": mime_type,
+                }
+
+    # Fallback for Imagen-style response shape.
+    for entry in payload.get("generatedImages", []) or []:
+        image = entry.get("image") if isinstance(entry, dict) else None
+        if not isinstance(image, dict):
+            continue
+        image_data = normalize_base64_payload(image.get("imageBytes") or image.get("bytesBase64Encoded") or "")
+        mime_type = image.get("mimeType") or "image/png"
+        if image_data:
+            return {
+                "image_base64": image_data,
+                "mime_type": mime_type,
+            }
+    return None
+
+
+def run_google_image_generation(prompt, requested_model="", aspect_ratio="", image_size=""):
+    if not GOOGLE_API_KEY:
+        raise RuntimeError("GOOGLE_API_KEY is not configured.")
+
+    model_name = (requested_model or "").strip() or GOOGLE_IMAGE_MODEL
+    ratio = (aspect_ratio or "").strip() or GOOGLE_IMAGE_ASPECT_RATIO or "1:1"
+    size = (image_size or "").strip() or GOOGLE_IMAGE_SIZE
+    base_url = GOOGLE_API_BASE_URL.rstrip("/")
+    endpoint = f"{base_url}/models/{quote(model_name, safe='')}:generateContent"
+
+    image_config = {"aspectRatio": ratio}
+    if size:
+        image_config["imageSize"] = size
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "imageConfig": image_config
+        }
+    }
+    body = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GOOGLE_API_KEY,
+    }
+    req = url_request.Request(endpoint, data=body, headers=headers, method="POST")
+
+    try:
+        with url_request.urlopen(req, timeout=120) as resp:
+            raw_body = resp.read().decode("utf-8")
+    except url_error.HTTPError as e:
+        error_body = e.read().decode("utf-8", "ignore")
+        message = f"Google image generation failed: HTTP {e.code}"
+        try:
+            parsed = json.loads(error_body)
+            detailed = extract_google_error_message(parsed)
+            if detailed:
+                message = f"{message} - {detailed}"
+        except Exception:
+            if error_body:
+                message = f"{message} - {error_body}"
+        raise RuntimeError(message)
+    except url_error.URLError as e:
+        raise RuntimeError(f"Google image generation failed: {e.reason}")
+
+    try:
+        response_payload = json.loads(raw_body) if raw_body else {}
+    except json.JSONDecodeError:
+        raise RuntimeError("Google image generation returned invalid JSON.")
+
+    possible_error = extract_google_error_message(response_payload)
+    if possible_error:
+        raise RuntimeError(f"Google image generation failed: {possible_error}")
+
+    image_part = extract_google_image_part(response_payload)
+    if not image_part:
+        text_parts = extract_google_text_parts(response_payload)
+        if text_parts:
+            raise RuntimeError(f"Google image generation did not return image data. Model message: {' '.join(text_parts)}")
+        raise RuntimeError("Google image generation did not return image data.")
+
+    result = {
+        "model": model_name,
+        "image_base64": image_part["image_base64"],
+        "mime_type": image_part["mime_type"],
+    }
+    text_parts = extract_google_text_parts(response_payload)
+    if text_parts:
+        result["message"] = "\n".join(text_parts)
+    return result
+
+
+def resolve_model_name(provider: str, requested: str | None, client=None) -> tuple[str, str | None]:
     """
     Pick a model name appropriate for the provider and fall back if the value
     looks incompatible (e.g., Ollama-style model name used with OpenAI).
@@ -244,6 +409,11 @@ def resolve_model_name(provider: str, requested: str | None) -> tuple[str, str |
     fallback = DEFAULT_MODELS.get(provider, "gpt-4o-mini")
     model = (requested or "").strip()
     if not model:
+        if provider == "ollama" and client is not None:
+            available_models = list_model_ids(client)
+            if available_models:
+                selected = available_models[0]
+                return selected, f"No Ollama model was specified. Fell back to '{selected}'."
         return fallback, None
 
     if provider == "openai" and ":" in model:
@@ -259,12 +429,16 @@ def classify_api_error(error: Exception) -> tuple[str, int]:
     """
     message = str(error)
     lowered = message.lower()
-    if "model_not_found" in lowered or "does not exist" in lowered:
+    if "model_not_found" in lowered or "does not exist" in lowered or "not_found_error" in lowered or ('model "' in lowered and 'not found' in lowered):
+        return message, 400
+    if "invalid argument" in lowered or "invalid value" in lowered:
         return message, 400
     if "rate limit" in lowered or "too many requests" in lowered:
         return message, 429
-    if "invalid api key" in lowered or "authentication" in lowered:
+    if "invalid api key" in lowered or "api key not valid" in lowered or "authentication" in lowered:
         return message, 401
+    if "permission denied" in lowered or "forbidden" in lowered:
+        return message, 403
     return message, 500
 
 # client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -276,7 +450,6 @@ def rewrite_text():
         instruction = data.get('instruction', '')
         provider = (data.get('provider') or 'openai').strip().lower()
         requested_model = data.get('model') or MODEL_NAME or ''
-        model_name, model_warning = resolve_model_name(provider, requested_model)
         use_web_search = bool(data.get('use_web_search'))
         context_mode = (data.get('context_mode') or '').strip().lower()
         context_text = data.get('context_text') or ''
@@ -301,6 +474,7 @@ def rewrite_text():
                 return jsonify({'error': 'OpenAI API key is not configured.'}), 500
 
         client = build_client(base_url=base_url or None, api_key=api_key or None)
+        model_name, model_warning = resolve_model_name(provider, requested_model, client)
 
         system_prompt = (
             "Rewrite the user's text according to the instruction and produce HTML fragments "
@@ -371,6 +545,39 @@ def rewrite_text():
         return jsonify({'error': message}), status
 
 
+@app.route('/generate-image', methods=['POST'])
+def generate_image():
+    try:
+        data = request.get_json() or {}
+        prompt = (data.get('prompt') or '').strip()
+        requested_model = (data.get('model') or '').strip()
+        aspect_ratio = (data.get('aspect_ratio') or '').strip()
+        image_size = (data.get('image_size') or '').strip()
+
+        if not prompt:
+            return jsonify({'error': 'No prompt provided'}), 400
+
+        result = run_google_image_generation(
+            prompt=prompt,
+            requested_model=requested_model,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+        )
+
+        response_body = {
+            'image_base64': result['image_base64'],
+            'mime_type': result['mime_type'],
+            'model': result['model'],
+        }
+        if result.get('message'):
+            response_body['model_message'] = result['message']
+        return jsonify(response_body)
+    except Exception as e:
+        message, status = classify_api_error(e)
+        print(f"Image generation error: {message}")
+        return jsonify({'error': message}), status
+
+
 @app.route('/models', methods=['GET'])
 def list_models():
     provider = (request.args.get('provider') or 'openai').strip().lower()
@@ -388,20 +595,7 @@ def list_models():
 
     try:
         client = build_client(base_url=base_url or None, api_key=api_key or None)
-        response = client.models.list()
-        raw_models = getattr(response, 'data', []) or []
-        models = []
-        for entry in raw_models:
-            model_id = None
-            if isinstance(entry, str):
-                model_id = entry
-            elif hasattr(entry, 'get'):
-                model_id = entry.get('id')
-            elif hasattr(entry, 'id'):
-                model_id = getattr(entry, 'id')
-            if model_id:
-                models.append(model_id)
-
+        models = list_model_ids(client)
         return jsonify({'provider': provider, 'models': models})
 
     except Exception as e:
